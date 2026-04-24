@@ -1,0 +1,2 @@
+"""music_synchronizer package."""
+

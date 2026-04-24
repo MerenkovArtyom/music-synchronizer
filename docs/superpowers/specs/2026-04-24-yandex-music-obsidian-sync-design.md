@@ -1,129 +1,129 @@
-# Yandex Music -> Obsidian Sync Design
+# Дизайн синхронизации Yandex Music -> Obsidian
 
-## Goal
+## Цель
 
-Build a Python application managed with `uv` that reads data from the Yandex Music API and exports it into Markdown files inside the Obsidian vault at `/Users/artem/Documents/my_music`.
+Собрать Python-приложение под управлением `uv`, которое получает данные из API Яндекс Музыки и экспортирует их в Markdown-файлы внутри хранилища Obsidian по пути `/Users/artem/Documents/my_music`.
 
-## Scope
+## Область MVP
 
-The initial MVP focuses on a local CLI application.
+Начальная версия MVP ориентирована на локальное CLI-приложение.
 
-Included in MVP:
-- project bootstrap with `uv`
-- environment-based configuration
-- Yandex Music API client wiring
-- Markdown export into the Obsidian folder
-- a single sync command for initial data pull
-- basic test setup and developer documentation
+Входит в MVP:
+- инициализация проекта через `uv`
+- конфигурация через переменные окружения
+- подключение клиента Яндекс Музыки
+- экспорт Markdown-файлов в папку Obsidian
+- одна команда синхронизации для первого импорта данных
+- базовая настройка тестов и документации для разработки
 
-Out of scope for MVP:
-- bidirectional sync
-- background daemon or scheduler
-- conflict resolution between local edits and remote data
-- advanced metadata enrichment from third-party services
-- GUI or web interface
+Не входит в MVP:
+- двусторонняя синхронизация
+- фоновый демон или планировщик
+- разрешение конфликтов между локальными правками и удалёнными данными
+- расширенное обогащение метаданных из сторонних сервисов
+- GUI или веб-интерфейс
 
-## Recommended Approach
+## Рекомендуемый подход
 
-We will build this as an application-first project:
-- a CLI command is the main entry point
-- internal modules stay focused on one responsibility each
-- the code is structured so it can be split into a reusable library later if needed
+Проект делаем как приложение:
+- основной точкой входа будет CLI-команда
+- внутренние модули отвечают каждый за одну понятную задачу
+- структура кода остаётся достаточно аккуратной, чтобы при необходимости позже выделить переиспользуемую библиотеку
 
-This is the fastest path to a working sync tool while keeping the internals clean enough for future growth.
+Это самый быстрый путь к рабочему синхронизатору без лишних абстракций, но с нормальной базой для роста.
 
-## Architecture
+## Архитектура
 
-The application will use a small set of modules under `src/music_synchronizer/`:
+Основные модули будут лежать в `src/music_synchronizer/`:
 
-- `cli.py`: Typer-based command line entry point
-- `config.py`: load and validate environment variables
-- `client.py`: Yandex Music API wrapper and authentication setup
-- `models.py`: normalized internal models for exported entities
-- `markdown_exporter.py`: Markdown rendering and file writing into Obsidian
-- `sync_service.py`: orchestration layer that fetches data and exports files
+- `cli.py`: точка входа CLI на базе Typer
+- `config.py`: загрузка и проверка переменных окружения
+- `client.py`: обёртка над API Яндекс Музыки и настройка аутентификации
+- `models.py`: нормализованные внутренние модели сущностей для экспорта
+- `markdown_exporter.py`: генерация Markdown и запись файлов в Obsidian
+- `sync_service.py`: слой оркестрации, который получает данные и передаёт их в экспорт
 
-Project-level files:
-- `pyproject.toml`: dependencies, scripts, and tool configuration
-- `.env.example`: example configuration values
-- `.gitignore`: Python, `uv`, env, and cache ignores
-- `README.md`: setup and run instructions
-- `tests/`: baseline tests for config loading and Markdown export
+Файлы верхнего уровня проекта:
+- `pyproject.toml`: зависимости, скрипты и настройки инструментов
+- `.env.example`: пример конфигурации
+- `.gitignore`: игнорирование Python-артефактов, `uv`, env-файлов и кешей
+- `README.md`: инструкции по установке и запуску
+- `tests/`: базовые тесты для конфигурации и Markdown-экспорта
 
-## Data Flow
+## Поток данных
 
-The main sync flow for MVP:
+Основной сценарий синхронизации в MVP:
 
-1. User runs `uv run music-sync sync`
-2. The app loads `.env`
-3. Config validation ensures the Yandex token and Obsidian path are present
-4. The client authenticates against Yandex Music
-5. The sync service fetches the chosen account data set for MVP
-6. The exporter turns normalized entities into Markdown files
-7. Files are written into `/Users/artem/Documents/my_music`
+1. Пользователь запускает `uv run music-sync sync`
+2. Приложение загружает `.env`
+3. Конфигурация проверяет наличие токена Яндекс Музыки и пути к Obsidian
+4. Клиент проходит аутентификацию в Яндекс Музыке
+5. Сервис синхронизации получает выбранный для MVP набор данных аккаунта
+6. Экспортёр преобразует нормализованные сущности в Markdown-файлы
+7. Файлы записываются в `/Users/artem/Documents/my_music`
 
-For the first iteration, the exported data set should stay intentionally small and predictable. The recommended MVP target is:
-- favorite tracks
-- playlists created by the user or saved in the account
+Для первой итерации набор данных должен быть небольшим и предсказуемым. Рекомендуемый MVP-объём:
+- любимые треки
+- плейлисты, созданные пользователем или сохранённые в аккаунте
 
-## Markdown Storage Design
+## Хранение Markdown
 
-Markdown files should be easy to browse in Obsidian and safe to regenerate.
+Markdown-файлы должны быть удобными для просмотра в Obsidian и безопасными для повторной генерации.
 
-Recommended output structure:
+Рекомендуемая структура вывода:
 - `tracks/<artist> - <title>.md`
 - `playlists/<playlist-title>.md`
 
-Each Markdown file should contain:
-- YAML frontmatter with stable identifiers from Yandex Music
-- human-readable metadata such as title, artist, album, duration, and source URLs when available
-- a generated timestamp
+Каждый Markdown-файл должен содержать:
+- YAML frontmatter со стабильными идентификаторами из Яндекс Музыки
+- человекочитаемые метаданные: название, исполнитель, альбом, длительность и исходные ссылки, если они доступны
+- временную метку генерации
 
-The generated content should be deterministic so repeated syncs update existing files instead of creating duplicates.
+Генерация должна быть детерминированной, чтобы повторный запуск обновлял существующие файлы, а не создавал дубликаты.
 
-## Configuration
+## Конфигурация
 
-Environment variables for MVP:
-- `YANDEX_MUSIC_TOKEN`: auth token for API access
-- `OBSIDIAN_VAULT_PATH`: target path, defaulting to `/Users/artem/Documents/my_music`
-- `LOG_LEVEL`: optional logging level for local debugging
+Переменные окружения для MVP:
+- `YANDEX_MUSIC_TOKEN`: токен доступа к API
+- `OBSIDIAN_VAULT_PATH`: путь к целевой папке, по умолчанию `/Users/artem/Documents/my_music`
+- `LOG_LEVEL`: необязательный уровень логирования для локальной отладки
 
-We will keep secrets in `.env` and commit only `.env.example`.
+Секреты будут храниться в `.env`, а в репозиторий попадёт только `.env.example`.
 
-## Error Handling
+## Обработка ошибок
 
-The app should fail clearly for:
-- missing or invalid environment variables
-- invalid Obsidian path
-- authentication failures
-- Yandex API request failures
-- file system write failures
+Приложение должно явно и понятно завершаться при:
+- отсутствии или невалидности переменных окружения
+- неверном пути к папке Obsidian
+- ошибках аутентификации
+- ошибках запросов к API Яндекс Музыки
+- ошибках записи в файловую систему
 
-CLI errors should be human-readable and actionable. We do not need retry logic in the MVP unless the client library makes it trivial.
+Ошибки в CLI должны быть человекочитаемыми и подсказывать, что делать дальше. Логику повторных попыток в MVP добавлять не нужно, если только библиотека клиента не даёт это почти бесплатно.
 
-## Testing
+## Тестирование
 
-MVP tests should cover:
-- config parsing and validation
-- Markdown rendering for at least one track and one playlist shape
-- sync orchestration with mocked client responses
+В MVP тестами нужно покрыть:
+- разбор и валидацию конфигурации
+- генерацию Markdown минимум для одного трека и одного плейлиста
+- оркестрацию синхронизации с моками ответов клиента
 
-Live API integration tests are not required for the first pass.
+Живые интеграционные тесты с реальным API на первом этапе не требуются.
 
-## Success Criteria
+## Критерии успеха
 
-The MVP is successful when:
-- a fresh clone can be initialized with `uv`
-- the user can create a `.env` from `.env.example`
-- `uv run music-sync sync` runs locally
-- Markdown files appear in `/Users/artem/Documents/my_music`
-- rerunning sync updates existing files deterministically
+MVP считается успешным, если:
+- свежий клон можно инициализировать через `uv`
+- пользователь может создать `.env` на основе `.env.example`
+- команда `uv run music-sync sync` запускается локально
+- в `/Users/artem/Documents/my_music` появляются Markdown-файлы
+- повторный запуск синхронизации детерминированно обновляет существующие файлы
 
-## Future Extensions
+## Дальнейшее развитие
 
-Possible next steps after MVP:
-- incremental sync using saved state
-- album and artist note generation
-- richer Obsidian linking between entities
-- scheduled sync via cron or launchd
-- import filters and selective sync modes
+Следующие шаги после MVP могут включать:
+- инкрементальную синхронизацию с сохранением состояния
+- генерацию заметок по альбомам и артистам
+- более богатые Obsidian-ссылки между сущностями
+- запуск синхронизации по расписанию через cron или launchd
+- фильтры импорта и выборочные режимы синхронизации
