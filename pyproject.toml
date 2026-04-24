@@ -8,6 +8,7 @@ dependencies = [
     "pydantic-settings>=2.8.0",
     "python-dotenv>=1.0.1",
     "typer>=0.16.0",
+    "yandex-music>=2.2.0",
 ]
 
 [project.scripts]
@@ -24,4 +25,3 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/music_synchronizer"]
-

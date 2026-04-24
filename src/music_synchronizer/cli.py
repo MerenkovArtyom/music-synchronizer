@@ -1,6 +1,7 @@
 import typer
 
 from music_synchronizer.config import Settings
+from music_synchronizer.sync import SyncService
 
 
 app = typer.Typer(help="CLI for Yandex Music to Obsidian synchronization.")
@@ -15,4 +16,12 @@ def show_config() -> None:
 
 @app.command("sync")
 def sync() -> None:
-    typer.echo("Sync skeleton is ready. Implementation comes next.")
+    settings = Settings()
+
+    try:
+        synced_count = SyncService(settings).run()
+    except RuntimeError as error:
+        typer.secho(f"Sync failed: {error}", fg=typer.colors.RED, err=True)
+        raise typer.Exit(code=1) from error
+
+    typer.echo(f"Synchronized {synced_count} tracks.")
