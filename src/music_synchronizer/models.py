@@ -15,3 +15,10 @@ class TrackInfo:
     @property
     def filename(self) -> str:
         return f"{self.title}.md"
+
+
+@dataclass(frozen=True, slots=True)
+class SavedTrackInfo:
+    title: str
+    artists: list[str]
+    tags: list[str]

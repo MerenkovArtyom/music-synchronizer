@@ -5,7 +5,7 @@ from datetime import datetime
 from pathlib import Path
 import re
 
-from music_synchronizer.models import TrackInfo
+from music_synchronizer.models import SavedTrackInfo, TrackInfo
 
 
 class ObsidianExporter:
@@ -58,6 +58,25 @@ class ObsidianExporter:
         for staged_file in staging_dir.glob("*.md"):
             staged_file.unlink()
         staging_dir.rmdir()
+
+    def list_tracks(self, tag: str) -> list[SavedTrackInfo]:
+        normalized_tag = tag.strip().casefold()
+        if not normalized_tag:
+            return []
+
+        matching_tracks: list[SavedTrackInfo] = []
+        if not self.tracks_dir.exists():
+            return matching_tracks
+
+        for path in sorted(self.tracks_dir.glob("*.md")):
+            track = self._read_saved_track(path)
+            if track is None:
+                continue
+
+            if any(saved_tag.casefold() == normalized_tag for saved_tag in track.tags):
+                matching_tracks.append(track)
+
+        return matching_tracks
 
     def _render_track(self, track: TrackInfo, synced_at: datetime, existing_tags: list[str]) -> str:
         artists = ", ".join(track.artists) if track.artists else "Unknown Artist"
@@ -165,6 +184,43 @@ class ObsidianExporter:
             return []
 
         return self._normalize_tags(parsed_tags)
+
+    def _read_saved_track(self, path: Path) -> SavedTrackInfo | None:
+        content = path.read_text(encoding="utf-8")
+        title = self._read_frontmatter_value(content, "title")
+        artists = self._read_frontmatter_list(content, "artists")
+        tags = self._read_frontmatter_list(content, "tags")
+
+        if title is None:
+            return None
+
+        return SavedTrackInfo(
+            title=title,
+            artists=artists,
+            tags=self._normalize_tags(tags),
+        )
+
+    def _read_frontmatter_value(self, content: str, field_name: str) -> str | None:
+        match = re.search(rf'^{field_name}:\s*"((?:[^"\\]|\\.)*)"$', content, re.MULTILINE)
+        if match is None:
+            return None
+
+        return match.group(1).replace('\\"', '"').replace("\\\\", "\\")
+
+    def _read_frontmatter_list(self, content: str, field_name: str) -> list[str]:
+        match = re.search(rf"^{field_name}:\s*(\[[^\n]*\])$", content, re.MULTILINE)
+        if match is None:
+            return []
+
+        try:
+            parsed_value = literal_eval(match.group(1))
+        except (SyntaxError, ValueError):
+            return []
+
+        if not isinstance(parsed_value, list):
+            return []
+
+        return [item for item in parsed_value if isinstance(item, str)]
 
     def _normalize_tags(self, *tag_groups: list[str]) -> list[str]:
         normalized: list[str] = []

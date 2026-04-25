@@ -1,6 +1,7 @@
 import typer
 
 from music_synchronizer.config import Settings
+from music_synchronizer.obsidian import ObsidianExporter
 from music_synchronizer.sync import SyncService
 
 
@@ -25,3 +26,18 @@ def sync() -> None:
         raise typer.Exit(code=1) from error
 
     typer.echo(f"Synchronized {synced_count} tracks.")
+
+
+@app.command("list")
+def list_tracks(tag: str = typer.Option(..., "--tag", help="Filter active saved tracks by tag.")) -> None:
+    settings = Settings()
+    exporter = ObsidianExporter(settings.obsidian_vault_path)
+    tracks = exporter.list_tracks(tag)
+
+    if not tracks:
+        typer.echo(f'No active saved tracks found for tag "{tag}".')
+        return
+
+    for track in tracks:
+        artists = ", ".join(track.artists) if track.artists else "Unknown Artist"
+        typer.echo(f"{track.title} - {artists}")

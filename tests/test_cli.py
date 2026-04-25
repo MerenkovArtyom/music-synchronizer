@@ -10,8 +10,98 @@ def test_help_shows_sync_placeholder() -> None:
     result = CliRunner().invoke(app, ["--help"])
 
     assert result.exit_code == 0
+    assert "list" in result.output
     assert "sync" in result.output
     assert "show-config" in result.output
+
+
+def test_list_filters_active_tracks_by_tag(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setenv("YANDEX_MUSIC_TOKEN", "token")
+    monkeypatch.setenv("OBSIDIAN_VAULT_PATH", str(tmp_path))
+
+    tracks_dir = tmp_path / "tracks"
+    tracks_dir.mkdir(parents=True, exist_ok=True)
+    (tracks_dir / "Song.md").write_text(
+        "\n".join(
+            [
+                "---",
+                'title: "Song"',
+                'artists: ["Artist"]',
+                'tags: ["Rock", "live"]',
+                "---",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    (tracks_dir / "Other.md").write_text(
+        "\n".join(
+            [
+                "---",
+                'title: "Other"',
+                'artists: ["Another Artist"]',
+                'tags: ["alt-rock"]',
+                "---",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    removed_dir = tracks_dir / "_removed"
+    removed_dir.mkdir(exist_ok=True)
+    (removed_dir / "Removed.md").write_text(
+        "\n".join(
+            [
+                "---",
+                'title: "Removed"',
+                'artists: ["Artist"]',
+                'tags: ["rock"]',
+                "---",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    result = CliRunner().invoke(app, ["list", "--tag", "rock"])
+
+    assert result.exit_code == 0
+    assert result.output.strip().splitlines() == ["Song - Artist"]
+
+
+def test_list_reports_when_no_tracks_match_tag(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setenv("YANDEX_MUSIC_TOKEN", "token")
+    monkeypatch.setenv("OBSIDIAN_VAULT_PATH", str(tmp_path))
+
+    tracks_dir = tmp_path / "tracks"
+    tracks_dir.mkdir(parents=True, exist_ok=True)
+    (tracks_dir / "Song.md").write_text(
+        "\n".join(
+            [
+                "---",
+                'title: "Song"',
+                'artists: ["Artist"]',
+                'tags: ["indie"]',
+                "---",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    result = CliRunner().invoke(app, ["list", "--tag", "rock"])
+
+    assert result.exit_code == 0
+    assert result.output.strip() == 'No active saved tracks found for tag "rock".'
+
+
+def test_list_requires_tag_option() -> None:
+    result = CliRunner().invoke(app, ["list"])
+
+    assert result.exit_code == 2
+    assert "Missing option '--tag'" in result.output
 
 
 def test_sync_creates_structured_obsidian_files(
