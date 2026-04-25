@@ -41,6 +41,7 @@ class YandexMusicClient:
         albums = getattr(track, "albums", [])
         primary_album = albums[0] if albums else None
         album_title = getattr(primary_album, "title", "")
+        tags = self._extract_tags(track, primary_album)
         album_id = getattr(primary_album, "id", None)
         duration_ms = int(getattr(track, "duration_ms", 0) or 0)
 
@@ -54,7 +55,27 @@ class YandexMusicClient:
             title=str(getattr(track, "title", "")),
             artists=artists,
             album=album_title,
+            tags=tags,
             duration_seconds=duration_ms // 1000,
             source_position=position,
             yandex_url=yandex_url,
         )
+
+    def _extract_tags(self, track: Any, primary_album: Any) -> list[str]:
+        meta_data = getattr(track, "meta_data", None)
+        raw_tags = [
+            getattr(meta_data, "genre", None),
+            getattr(track, "genre", None),
+            getattr(primary_album, "genre", None),
+        ]
+
+        tags: list[str] = []
+        for raw_tag in raw_tags:
+            if not isinstance(raw_tag, str):
+                continue
+
+            normalized_tag = raw_tag.strip()
+            if normalized_tag and normalized_tag not in tags:
+                tags.append(normalized_tag)
+
+        return tags

@@ -7,6 +7,7 @@ class TrackInfo:
     title: str
     artists: list[str]
     album: str
+    tags: list[str]
     duration_seconds: int
     source_position: int
     yandex_url: str

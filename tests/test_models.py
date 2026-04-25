@@ -7,6 +7,7 @@ def test_track_info_markdown_filename_uses_track_title() -> None:
         title="Song Name",
         artists=["Artist"],
         album="Album",
+        tags=["rock"],
         duration_seconds=180,
         source_position=1,
         yandex_url="https://music.yandex.ru/track/123",

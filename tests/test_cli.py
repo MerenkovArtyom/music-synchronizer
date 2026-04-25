@@ -34,6 +34,7 @@ def test_sync_creates_structured_obsidian_files(
                     title="Song",
                     artists=["Artist"],
                     album="Album",
+                    tags=["rock"],
                     duration_seconds=180,
                     source_position=1,
                     yandex_url="https://music.yandex.ru/track/1",

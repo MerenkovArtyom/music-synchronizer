@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from ast import literal_eval
 from datetime import datetime
 from pathlib import Path
 import re
@@ -21,6 +22,10 @@ class ObsidianExporter:
 
         active_ids = {track.track_id for track in tracks}
         managed_files = self._scan_managed_files()
+        existing_tags = {
+            track_id: self._read_tags(path)
+            for track_id, path in managed_files.items()
+        }
         unmanaged_active_names = {
             path.name for path in self.tracks_dir.glob("*.md") if path not in managed_files.values()
         }
@@ -41,20 +46,29 @@ class ObsidianExporter:
 
         for track in tracks:
             active_path = desired_paths[track.track_id]
-            active_path.write_text(self._render_track(track, synced_at), encoding="utf-8")
+            active_path.write_text(
+                self._render_track(
+                    track,
+                    synced_at,
+                    existing_tags=existing_tags.get(track.track_id, []),
+                ),
+                encoding="utf-8",
+            )
 
         for staged_file in staging_dir.glob("*.md"):
             staged_file.unlink()
         staging_dir.rmdir()
 
-    def _render_track(self, track: TrackInfo, synced_at: datetime) -> str:
+    def _render_track(self, track: TrackInfo, synced_at: datetime, existing_tags: list[str]) -> str:
         artists = ", ".join(track.artists) if track.artists else "Unknown Artist"
+        tags = self._normalize_tags(existing_tags, track.tags)
         lines = [
             "---",
             f'track_id: "{self._escape_yaml(track.track_id)}"',
             f'title: "{self._escape_yaml(track.title)}"',
             f"artists: [{', '.join(self._quote_yaml(artist) for artist in track.artists)}]",
             f'album: "{self._escape_yaml(track.album)}"',
+            f"tags: [{', '.join(self._quote_yaml(tag) for tag in tags)}]",
             f"duration_seconds: {track.duration_seconds}",
             f"position: {track.source_position}",
             'source: "likes"',
@@ -135,3 +149,33 @@ class ObsidianExporter:
         if match is None:
             return None
         return match.group(1)
+
+    def _read_tags(self, path: Path) -> list[str]:
+        content = path.read_text(encoding="utf-8")
+        match = re.search(r"^tags:\s*(\[[^\n]*\])$", content, re.MULTILINE)
+        if match is None:
+            return []
+
+        try:
+            parsed_tags = literal_eval(match.group(1))
+        except (SyntaxError, ValueError):
+            return []
+
+        if not isinstance(parsed_tags, list):
+            return []
+
+        return self._normalize_tags(parsed_tags)
+
+    def _normalize_tags(self, *tag_groups: list[str]) -> list[str]:
+        normalized: list[str] = []
+
+        for tag_group in tag_groups:
+            for tag in tag_group:
+                if not isinstance(tag, str):
+                    continue
+
+                cleaned_tag = tag.strip()
+                if cleaned_tag and cleaned_tag not in normalized:
+                    normalized.append(cleaned_tag)
+
+        return normalized
