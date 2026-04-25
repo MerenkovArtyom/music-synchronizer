@@ -14,7 +14,7 @@ class Settings(BaseSettings):
 
     yandex_music_token: str = Field(alias="YANDEX_MUSIC_TOKEN")
     obsidian_vault_path: Path = Field(
-        default=Path("/Users/artem/Documents/my_music"),
+        default=Path("~/Documents/my_music"),
         alias="OBSIDIAN_VAULT_PATH",
     )
     log_level: str = Field(default="INFO", alias="LOG_LEVEL")
