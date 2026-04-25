@@ -97,11 +97,108 @@ def test_list_reports_when_no_tracks_match_tag(
     assert result.output.strip() == 'No active saved tracks found for tag "rock".'
 
 
-def test_list_requires_tag_option() -> None:
+def test_list_filters_active_tracks_by_artist(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setenv("YANDEX_MUSIC_TOKEN", "token")
+    monkeypatch.setenv("OBSIDIAN_VAULT_PATH", str(tmp_path))
+
+    tracks_dir = tmp_path / "tracks"
+    tracks_dir.mkdir(parents=True, exist_ok=True)
+    (tracks_dir / "Song.md").write_text(
+        "\n".join(
+            [
+                "---",
+                'title: "Song"',
+                'artists: ["ARTIST", "Guest"]',
+                'tags: ["Rock"]',
+                "---",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    (tracks_dir / "Other.md").write_text(
+        "\n".join(
+            [
+                "---",
+                'title: "Other"',
+                'artists: ["Another Artist"]',
+                'tags: ["Rock"]',
+                "---",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    removed_dir = tracks_dir / "_removed"
+    removed_dir.mkdir(exist_ok=True)
+    (removed_dir / "Removed.md").write_text(
+        "\n".join(
+            [
+                "---",
+                'title: "Removed"',
+                'artists: ["Artist"]',
+                'tags: ["Rock"]',
+                "---",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    result = CliRunner().invoke(app, ["list", "--artist", "artist"])
+
+    assert result.exit_code == 0
+    assert result.output.strip().splitlines() == ["Song - ARTIST, Guest"]
+
+
+def test_list_reports_when_no_tracks_match_artist(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setenv("YANDEX_MUSIC_TOKEN", "token")
+    monkeypatch.setenv("OBSIDIAN_VAULT_PATH", str(tmp_path))
+
+    tracks_dir = tmp_path / "tracks"
+    tracks_dir.mkdir(parents=True, exist_ok=True)
+    (tracks_dir / "Song.md").write_text(
+        "\n".join(
+            [
+                "---",
+                'title: "Song"',
+                'artists: ["Artist"]',
+                'tags: ["indie"]',
+                "---",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    result = CliRunner().invoke(app, ["list", "--artist", "unknown"])
+
+    assert result.exit_code == 0
+    assert result.output.strip() == 'No active saved tracks found for artist "unknown".'
+
+
+def test_list_requires_exactly_one_filter() -> None:
     result = CliRunner().invoke(app, ["list"])
 
     assert result.exit_code == 2
-    assert "Missing option '--tag'" in result.output
+    assert "Exactly one of --tag or --artist must be provided." in result.output
+
+
+def test_list_rejects_multiple_filters() -> None:
+    result = CliRunner().invoke(app, ["list", "--tag", "rock", "--artist", "artist"])
+
+    assert result.exit_code == 2
+    assert "Exactly one of --tag or --artist must be provided." in result.output
+
+
+def test_list_reports_clear_error_for_extra_filter_value() -> None:
+    result = CliRunner().invoke(app, ["list", "--artist", "Artist", "Guest"])
+
+    assert result.exit_code == 2
+    assert "Filter values must be passed as a single argument." in result.output
+    assert '--artist "Artist Guest"' in result.output
 
 
 def test_sync_creates_structured_obsidian_files(

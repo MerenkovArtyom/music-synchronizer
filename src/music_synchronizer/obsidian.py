@@ -59,7 +59,7 @@ class ObsidianExporter:
             staged_file.unlink()
         staging_dir.rmdir()
 
-    def list_tracks(self, tag: str) -> list[SavedTrackInfo]:
+    def list_tracks_by_tag(self, tag: str) -> list[SavedTrackInfo]:
         normalized_tag = tag.strip().casefold()
         if not normalized_tag:
             return []
@@ -74,6 +74,25 @@ class ObsidianExporter:
                 continue
 
             if any(saved_tag.casefold() == normalized_tag for saved_tag in track.tags):
+                matching_tracks.append(track)
+
+        return matching_tracks
+
+    def list_tracks_by_artist(self, artist: str) -> list[SavedTrackInfo]:
+        normalized_artist = artist.strip().casefold()
+        if not normalized_artist:
+            return []
+
+        matching_tracks: list[SavedTrackInfo] = []
+        if not self.tracks_dir.exists():
+            return matching_tracks
+
+        for path in sorted(self.tracks_dir.glob("*.md")):
+            track = self._read_saved_track(path)
+            if track is None:
+                continue
+
+            if any(saved_artist.casefold() == normalized_artist for saved_artist in track.artists):
                 matching_tracks.append(track)
 
         return matching_tracks

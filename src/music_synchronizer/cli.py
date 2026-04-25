@@ -28,14 +28,36 @@ def sync() -> None:
     typer.echo(f"Synchronized {synced_count} tracks.")
 
 
-@app.command("list")
-def list_tracks(tag: str = typer.Option(..., "--tag", help="Filter active saved tracks by tag.")) -> None:
+@app.command(
+    "list",
+    context_settings={"allow_extra_args": True, "ignore_unknown_options": False},
+)
+def list_tracks(
+    ctx: typer.Context,
+    tag: str | None = typer.Option(None, "--tag", help="Filter active saved tracks by tag."),
+    artist: str | None = typer.Option(None, "--artist", help="Filter active saved tracks by artist."),
+) -> None:
+    if ctx.args:
+        raise typer.BadParameter(
+            'Filter values must be passed as a single argument. If the name contains spaces, use quotes, for example --artist "Artist Guest".'
+        )
+
+    if (tag is None and artist is None) or (tag is not None and artist is not None):
+        raise typer.BadParameter("Exactly one of --tag or --artist must be provided.")
+
     settings = Settings()
     exporter = ObsidianExporter(settings.obsidian_vault_path)
-    tracks = exporter.list_tracks(tag)
+    if tag is not None:
+        tracks = exporter.list_tracks_by_tag(tag)
+        filter_name = "tag"
+        filter_value = tag
+    else:
+        tracks = exporter.list_tracks_by_artist(artist or "")
+        filter_name = "artist"
+        filter_value = artist or ""
 
     if not tracks:
-        typer.echo(f'No active saved tracks found for tag "{tag}".')
+        typer.echo(f'No active saved tracks found for {filter_name} "{filter_value}".')
         return
 
     for track in tracks:
