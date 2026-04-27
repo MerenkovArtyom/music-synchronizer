@@ -8,6 +8,8 @@ class TrackInfo:
     artists: list[str]
     album: str
     tags: list[str]
+    year: int | None
+    cover_url: str
     duration_seconds: int
     source_position: int
     yandex_url: str

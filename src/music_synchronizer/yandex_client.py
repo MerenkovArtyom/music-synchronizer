@@ -44,6 +44,8 @@ class YandexMusicClient:
         tags = self._extract_tags(track, primary_album)
         album_id = getattr(primary_album, "id", None)
         duration_ms = int(getattr(track, "duration_ms", 0) or 0)
+        year = self._extract_year(track, primary_album)
+        cover_url = self._extract_cover_url(primary_album)
 
         if album_id is not None:
             yandex_url = f"https://music.yandex.ru/album/{album_id}/track/{track_id}"
@@ -56,6 +58,8 @@ class YandexMusicClient:
             artists=artists,
             album=album_title,
             tags=tags,
+            year=year,
+            cover_url=cover_url,
             duration_seconds=duration_ms // 1000,
             source_position=position,
             yandex_url=yandex_url,
@@ -79,3 +83,50 @@ class YandexMusicClient:
                 tags.append(normalized_tag)
 
         return tags
+
+    def _extract_year(self, track: Any, primary_album: Any) -> int | None:
+        candidates = [
+            getattr(track, "year", None),
+            getattr(track, "release_year", None),
+            getattr(primary_album, "year", None),
+            getattr(primary_album, "release_year", None),
+        ]
+
+        for raw_year in candidates:
+            normalized_year = self._normalize_year(raw_year)
+            if normalized_year is not None:
+                return normalized_year
+
+        return None
+
+    def _normalize_year(self, raw_year: Any) -> int | None:
+        if raw_year is None:
+            return None
+
+        if isinstance(raw_year, int):
+            return raw_year
+
+        if isinstance(raw_year, str):
+            stripped_year = raw_year.strip()
+            if stripped_year.isdigit():
+                return int(stripped_year)
+
+        return None
+
+    def _extract_cover_url(self, primary_album: Any) -> str:
+        raw_cover = getattr(primary_album, "cover_uri", None) or getattr(primary_album, "cover_url", None)
+        if not isinstance(raw_cover, str):
+            return ""
+
+        cover_url = raw_cover.strip()
+        if not cover_url:
+            return ""
+
+        if cover_url.startswith("//"):
+            return f"https:{cover_url}"
+
+        if cover_url.startswith("http://") or cover_url.startswith("https://"):
+            return cover_url
+
+        normalized_cover = cover_url.replace("%%", "1000x1000")
+        return f"https://{normalized_cover.lstrip('/')}"

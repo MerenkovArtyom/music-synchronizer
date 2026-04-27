@@ -101,6 +101,8 @@ class ObsidianExporter:
         artists = ", ".join(track.artists) if track.artists else "Unknown Artist"
         system_tags = self._normalize_tags(track.tags)
         user_tags = self._normalize_tags(user_tags)
+        year_value = str(track.year) if track.year is not None else "null"
+        duration_text = self._format_duration(track.duration_seconds)
         lines = [
             "---",
             f'track_id: "{self._escape_yaml(track.track_id)}"',
@@ -109,6 +111,8 @@ class ObsidianExporter:
             f'album: "{self._escape_yaml(track.album)}"',
             f"system_tags: [{', '.join(self._quote_yaml(tag) for tag in system_tags)}]",
             f"user_tags: [{', '.join(self._quote_yaml(tag) for tag in user_tags)}]",
+            f"year: {year_value}",
+            f'cover_url: "{self._escape_yaml(track.cover_url)}"',
             f"duration_seconds: {track.duration_seconds}",
             f"position: {track.source_position}",
             'source: "likes"',
@@ -120,10 +124,23 @@ class ObsidianExporter:
             "",
             f"Artists: {artists}",
             f"Album: {track.album or '-'}",
+            f"Year: {track.year if track.year is not None else '-'}",
+            f"Duration: {duration_text}",
             f"Yandex Music: {track.yandex_url}",
             "",
         ]
+        if track.cover_url:
+            lines.extend(
+                [
+                    f"![Album cover]({track.cover_url})",
+                    "",
+                ]
+            )
         return "\n".join(lines)
+
+    def _format_duration(self, duration_seconds: int) -> str:
+        minutes, seconds = divmod(max(duration_seconds, 0), 60)
+        return f"{minutes}:{seconds:02d}"
 
     def _quote_yaml(self, value: str) -> str:
         return f'"{self._escape_yaml(value)}"'
