@@ -22,8 +22,8 @@ class ObsidianExporter:
 
         active_ids = {track.track_id for track in tracks}
         managed_files = self._scan_managed_files()
-        existing_tags = {
-            track_id: self._read_tags(path)
+        existing_user_tags = {
+            track_id: self._read_user_tags(path)
             for track_id, path in managed_files.items()
         }
         unmanaged_active_names = {
@@ -50,7 +50,7 @@ class ObsidianExporter:
                 self._render_track(
                     track,
                     synced_at,
-                    existing_tags=existing_tags.get(track.track_id, []),
+                    user_tags=existing_user_tags.get(track.track_id, []),
                 ),
                 encoding="utf-8",
             )
@@ -97,16 +97,18 @@ class ObsidianExporter:
 
         return matching_tracks
 
-    def _render_track(self, track: TrackInfo, synced_at: datetime, existing_tags: list[str]) -> str:
+    def _render_track(self, track: TrackInfo, synced_at: datetime, user_tags: list[str]) -> str:
         artists = ", ".join(track.artists) if track.artists else "Unknown Artist"
-        tags = self._normalize_tags(existing_tags, track.tags)
+        system_tags = self._normalize_tags(track.tags)
+        user_tags = self._normalize_tags(user_tags)
         lines = [
             "---",
             f'track_id: "{self._escape_yaml(track.track_id)}"',
             f'title: "{self._escape_yaml(track.title)}"',
             f"artists: [{', '.join(self._quote_yaml(artist) for artist in track.artists)}]",
             f'album: "{self._escape_yaml(track.album)}"',
-            f"tags: [{', '.join(self._quote_yaml(tag) for tag in tags)}]",
+            f"system_tags: [{', '.join(self._quote_yaml(tag) for tag in system_tags)}]",
+            f"user_tags: [{', '.join(self._quote_yaml(tag) for tag in user_tags)}]",
             f"duration_seconds: {track.duration_seconds}",
             f"position: {track.source_position}",
             'source: "likes"',
@@ -188,35 +190,33 @@ class ObsidianExporter:
             return None
         return match.group(1)
 
-    def _read_tags(self, path: Path) -> list[str]:
+    def _read_user_tags(self, path: Path) -> list[str]:
         content = path.read_text(encoding="utf-8")
-        match = re.search(r"^tags:\s*(\[[^\n]*\])$", content, re.MULTILINE)
-        if match is None:
-            return []
+        user_tags = self._read_optional_frontmatter_list(content, "user_tags")
+        if user_tags is not None:
+            return self._normalize_tags(user_tags)
 
-        try:
-            parsed_tags = literal_eval(match.group(1))
-        except (SyntaxError, ValueError):
-            return []
-
-        if not isinstance(parsed_tags, list):
-            return []
-
-        return self._normalize_tags(parsed_tags)
+        legacy_tags = self._read_frontmatter_list(content, "tags")
+        return self._normalize_tags(legacy_tags)
 
     def _read_saved_track(self, path: Path) -> SavedTrackInfo | None:
         content = path.read_text(encoding="utf-8")
         title = self._read_frontmatter_value(content, "title")
         artists = self._read_frontmatter_list(content, "artists")
-        tags = self._read_frontmatter_list(content, "tags")
+        user_tags = self._read_optional_frontmatter_list(content, "user_tags")
+        system_tags = self._read_optional_frontmatter_list(content, "system_tags")
 
         if title is None:
             return None
 
+        tags = self._normalize_tags(user_tags or [], system_tags or [])
+        if user_tags is None and system_tags is None:
+            tags = self._normalize_tags(self._read_frontmatter_list(content, "tags"))
+
         return SavedTrackInfo(
             title=title,
             artists=artists,
-            tags=self._normalize_tags(tags),
+            tags=tags,
         )
 
     def _read_frontmatter_value(self, content: str, field_name: str) -> str | None:
@@ -227,19 +227,59 @@ class ObsidianExporter:
         return match.group(1).replace('\\"', '"').replace("\\\\", "\\")
 
     def _read_frontmatter_list(self, content: str, field_name: str) -> list[str]:
+        parsed_value = self._read_optional_frontmatter_list(content, field_name)
+        return parsed_value or []
+
+    def _read_optional_frontmatter_list(self, content: str, field_name: str) -> list[str] | None:
         match = re.search(rf"^{field_name}:\s*(\[[^\n]*\])$", content, re.MULTILINE)
+        if match is not None:
+            try:
+                parsed_value = literal_eval(match.group(1))
+            except (SyntaxError, ValueError):
+                return None
+
+            if not isinstance(parsed_value, list):
+                return None
+
+            return [item for item in parsed_value if isinstance(item, str)]
+
+        frontmatter = self._read_frontmatter(content)
+        if frontmatter is None:
+            return None
+
+        lines = frontmatter.splitlines()
+        for index, line in enumerate(lines):
+            if line.strip() != f"{field_name}:":
+                continue
+
+            parsed_items: list[str] = []
+            for nested_line in lines[index + 1 :]:
+                if not nested_line.startswith(" "):
+                    break
+
+                nested_match = re.match(r'^\s*-\s*(.+?)\s*$', nested_line)
+                if nested_match is None:
+                    continue
+
+                item_text = nested_match.group(1)
+                try:
+                    parsed_item = literal_eval(item_text)
+                except (SyntaxError, ValueError):
+                    parsed_item = item_text.strip().strip('"').strip("'")
+
+                if isinstance(parsed_item, str):
+                    parsed_items.append(parsed_item)
+
+            return parsed_items
+
+        return None
+
+    def _read_frontmatter(self, content: str) -> str | None:
+        match = re.match(r"^---\n(.*?)\n---(?:\n|$)", content, re.DOTALL)
         if match is None:
-            return []
+            return None
 
-        try:
-            parsed_value = literal_eval(match.group(1))
-        except (SyntaxError, ValueError):
-            return []
-
-        if not isinstance(parsed_value, list):
-            return []
-
-        return [item for item in parsed_value if isinstance(item, str)]
+        return match.group(1)
 
     def _normalize_tags(self, *tag_groups: list[str]) -> list[str]:
         normalized: list[str] = []

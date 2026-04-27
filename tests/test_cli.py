@@ -30,7 +30,8 @@ def test_list_filters_active_tracks_by_tag(
                 "---",
                 'title: "Song"',
                 'artists: ["Artist"]',
-                'tags: ["Rock", "live"]',
+                'system_tags: ["Rock"]',
+                'user_tags: ["live"]',
                 "---",
             ]
         ),
@@ -42,7 +43,8 @@ def test_list_filters_active_tracks_by_tag(
                 "---",
                 'title: "Other"',
                 'artists: ["Another Artist"]',
-                'tags: ["alt-rock"]',
+                'system_tags: ["alt-rock"]',
+                "user_tags: []",
                 "---",
             ]
         ),
@@ -56,7 +58,8 @@ def test_list_filters_active_tracks_by_tag(
                 "---",
                 'title: "Removed"',
                 'artists: ["Artist"]',
-                'tags: ["rock"]',
+                'system_tags: ["rock"]',
+                "user_tags: []",
                 "---",
             ]
         ),
@@ -84,7 +87,8 @@ def test_list_reports_when_no_tracks_match_tag(
                 "---",
                 'title: "Song"',
                 'artists: ["Artist"]',
-                'tags: ["indie"]',
+                'system_tags: ["indie"]',
+                "user_tags: []",
                 "---",
             ]
         ),
@@ -112,7 +116,8 @@ def test_list_filters_active_tracks_by_artist(
                 "---",
                 'title: "Song"',
                 'artists: ["ARTIST", "Guest"]',
-                'tags: ["Rock"]',
+                'system_tags: ["Rock"]',
+                "user_tags: []",
                 "---",
             ]
         ),
@@ -124,7 +129,8 @@ def test_list_filters_active_tracks_by_artist(
                 "---",
                 'title: "Other"',
                 'artists: ["Another Artist"]',
-                'tags: ["Rock"]',
+                'system_tags: ["Rock"]',
+                "user_tags: []",
                 "---",
             ]
         ),
@@ -138,7 +144,8 @@ def test_list_filters_active_tracks_by_artist(
                 "---",
                 'title: "Removed"',
                 'artists: ["Artist"]',
-                'tags: ["Rock"]',
+                'system_tags: ["Rock"]',
+                "user_tags: []",
                 "---",
             ]
         ),
@@ -166,12 +173,71 @@ def test_list_reports_when_no_tracks_match_artist(
                 "---",
                 'title: "Song"',
                 'artists: ["Artist"]',
-                'tags: ["indie"]',
+                'system_tags: ["indie"]',
+                "user_tags: []",
                 "---",
             ]
         ),
         encoding="utf-8",
     )
+
+
+def test_list_filters_active_tracks_by_user_tag(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setenv("YANDEX_MUSIC_TOKEN", "token")
+    monkeypatch.setenv("OBSIDIAN_VAULT_PATH", str(tmp_path))
+
+    tracks_dir = tmp_path / "tracks"
+    tracks_dir.mkdir(parents=True, exist_ok=True)
+    (tracks_dir / "Song.md").write_text(
+        "\n".join(
+            [
+                "---",
+                'title: "Song"',
+                'artists: ["Artist"]',
+                "system_tags: []",
+                'user_tags: ["Mood"]',
+                "---",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    result = CliRunner().invoke(app, ["list", "--tag", "mood"])
+
+    assert result.exit_code == 0
+    assert result.output.strip().splitlines() == ["Song - Artist"]
+
+
+def test_list_deduplicates_combined_user_and_system_tags(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setenv("YANDEX_MUSIC_TOKEN", "token")
+    monkeypatch.setenv("OBSIDIAN_VAULT_PATH", str(tmp_path))
+
+    tracks_dir = tmp_path / "tracks"
+    tracks_dir.mkdir(parents=True, exist_ok=True)
+    (tracks_dir / "Song.md").write_text(
+        "\n".join(
+            [
+                "---",
+                'title: "Song"',
+                'artists: ["Artist"]',
+                'system_tags: ["Rock"]',
+                'user_tags: ["rock", "live", " live "]',
+                "---",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    result = CliRunner().invoke(app, ["list", "--tag", "live"])
+
+    assert result.exit_code == 0
+    assert result.output.strip().splitlines() == ["Song - Artist"]
 
     result = CliRunner().invoke(app, ["list", "--artist", "unknown"])
 

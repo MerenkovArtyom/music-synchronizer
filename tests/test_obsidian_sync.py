@@ -28,7 +28,9 @@ def test_export_writes_playlist_and_track_notes(tmp_path: Path) -> None:
 
     assert not (tmp_path / "playlist.md").exists()
     assert 'track_id: "101"' in track_note
-    assert 'tags: ["indie"]' in track_note
+    assert 'system_tags: ["indie"]' in track_note
+    assert "user_tags: []" in track_note
+    assert "\ntags:" not in track_note
     assert 'source: "likes"' in track_note
     assert 'synced_at: "2026-04-24T12:00:00+00:00"' in track_note
     assert "# First" in track_note
@@ -103,8 +105,8 @@ def test_export_preserves_manual_tags_on_resync(tmp_path: Path) -> None:
     note_path = tmp_path / "tracks" / "First.md"
     note_path.write_text(
         note_path.read_text(encoding="utf-8").replace(
-            'tags: ["indie"]',
-            'tags: ["indie", "manual-tag"]',
+            "user_tags: []",
+            'user_tags: ["manual-tag"]',
         ),
         encoding="utf-8",
     )
@@ -112,10 +114,11 @@ def test_export_preserves_manual_tags_on_resync(tmp_path: Path) -> None:
     exporter.sync([_track("101", 1, "First")], synced_at=synced_at)
 
     track_note = note_path.read_text(encoding="utf-8")
-    assert 'tags: ["indie", "manual-tag"]' in track_note
+    assert 'system_tags: ["indie"]' in track_note
+    assert 'user_tags: ["manual-tag"]' in track_note
 
 
-def test_export_deduplicates_synced_and_manual_tags(tmp_path: Path) -> None:
+def test_export_updates_system_tags_without_overwriting_user_tags(tmp_path: Path) -> None:
     exporter = ObsidianExporter(tmp_path)
     synced_at = datetime(2026, 4, 24, 12, 0, tzinfo=timezone.utc)
 
@@ -124,8 +127,8 @@ def test_export_deduplicates_synced_and_manual_tags(tmp_path: Path) -> None:
     note_path = tmp_path / "tracks" / "First.md"
     note_path.write_text(
         note_path.read_text(encoding="utf-8").replace(
-            'tags: ["indie"]',
-            'tags: ["manual-tag", "indie", "manual-tag"]',
+            "user_tags: []",
+            'user_tags: ["manual-tag"]',
         ),
         encoding="utf-8",
     )
@@ -137,7 +140,7 @@ def test_export_deduplicates_synced_and_manual_tags(tmp_path: Path) -> None:
                 title="First",
                 artists=["Artist"],
                 album="Album",
-                tags=["indie", "manual-tag", "dream-pop"],
+                tags=["dream-pop"],
                 duration_seconds=180,
                 source_position=1,
                 yandex_url="https://music.yandex.ru/track/101",
@@ -147,4 +150,117 @@ def test_export_deduplicates_synced_and_manual_tags(tmp_path: Path) -> None:
     )
 
     track_note = note_path.read_text(encoding="utf-8")
-    assert 'tags: ["manual-tag", "indie", "dream-pop"]' in track_note
+    assert 'system_tags: ["dream-pop"]' in track_note
+    assert 'user_tags: ["manual-tag"]' in track_note
+
+
+def test_export_deduplicates_user_and_system_tags_independently(tmp_path: Path) -> None:
+    exporter = ObsidianExporter(tmp_path)
+    synced_at = datetime(2026, 4, 24, 12, 0, tzinfo=timezone.utc)
+
+    exporter.sync([_track("101", 1, "First")], synced_at=synced_at)
+
+    note_path = tmp_path / "tracks" / "First.md"
+    note_path.write_text(
+        note_path.read_text(encoding="utf-8").replace(
+            "user_tags: []",
+            'user_tags: ["manual-tag", "manual-tag", " manual-tag ", ""]',
+        ),
+        encoding="utf-8",
+    )
+
+    exporter.sync(
+        [
+            TrackInfo(
+                track_id="101",
+                title="First",
+                artists=["Artist"],
+                album="Album",
+                tags=["dream-pop", " dream-pop ", "", "indie"],
+                duration_seconds=180,
+                source_position=1,
+                yandex_url="https://music.yandex.ru/track/101",
+            )
+        ],
+        synced_at=synced_at,
+    )
+
+    track_note = note_path.read_text(encoding="utf-8")
+    assert 'system_tags: ["dream-pop", "indie"]' in track_note
+    assert 'user_tags: ["manual-tag"]' in track_note
+
+
+def test_export_migrates_legacy_tags_to_user_tags(tmp_path: Path) -> None:
+    exporter = ObsidianExporter(tmp_path)
+    synced_at = datetime(2026, 4, 24, 12, 0, tzinfo=timezone.utc)
+    tracks_dir = tmp_path / "tracks"
+    tracks_dir.mkdir(parents=True, exist_ok=True)
+    note_path = tracks_dir / "First.md"
+    note_path.write_text(
+        "\n".join(
+            [
+                "---",
+                'track_id: "101"',
+                'title: "First"',
+                'artists: ["Artist"]',
+                'album: "Album"',
+                'tags: ["legacy-tag", " legacy-tag ", ""]',
+                "duration_seconds: 180",
+                "position: 1",
+                'source: "likes"',
+                'yandex_url: "https://music.yandex.ru/track/101"',
+                'synced_at: "2026-04-24T12:00:00+00:00"',
+                "---",
+                "",
+                "# First",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    exporter.sync([_track("101", 1, "First")], synced_at=synced_at)
+
+    track_note = note_path.read_text(encoding="utf-8")
+    assert 'system_tags: ["indie"]' in track_note
+    assert 'user_tags: ["legacy-tag"]' in track_note
+    assert "\ntags:" not in track_note
+
+
+def test_export_preserves_multiline_user_tags_on_resync(tmp_path: Path) -> None:
+    exporter = ObsidianExporter(tmp_path)
+    synced_at = datetime(2026, 4, 24, 12, 0, tzinfo=timezone.utc)
+
+    exporter.sync([_track("101", 1, "First")], synced_at=synced_at)
+
+    note_path = tmp_path / "tracks" / "First.md"
+    note_path.write_text(
+        "\n".join(
+            [
+                "---",
+                'track_id: "101"',
+                'title: "First"',
+                'artists: ["Artist"]',
+                'album: "Album"',
+                'system_tags: ["indie"]',
+                "user_tags:",
+                '  - "manual-tag"',
+                '  - "manual-tag-2"',
+                "duration_seconds: 180",
+                "position: 1",
+                'source: "likes"',
+                'yandex_url: "https://music.yandex.ru/track/101"',
+                'synced_at: "2026-04-24T12:00:00+00:00"',
+                "---",
+                "",
+                "# First",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    exporter.sync([_track("101", 1, "First")], synced_at=synced_at)
+
+    track_note = note_path.read_text(encoding="utf-8")
+    assert 'user_tags: ["manual-tag", "manual-tag-2"]' in track_note
