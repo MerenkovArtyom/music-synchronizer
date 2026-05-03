@@ -16,7 +16,7 @@ function createWindow(): BrowserWindow {
     height: 860,
     minWidth: 960,
     minHeight: 720,
-    backgroundColor: "#f4efe6",
+    backgroundColor: "#040506",
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,

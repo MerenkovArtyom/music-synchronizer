@@ -7,33 +7,79 @@
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
+    <div class="page-glow page-glow-blue" aria-hidden="true"></div>
+    <div class="page-glow page-glow-violet" aria-hidden="true"></div>
+
     <div class="shell">
-      <header class="hero">
-        <p class="eyebrow">Desktop Prototype</p>
-        <h1>Yandex Music Synchronizer</h1>
-        <p class="lede">
-          Thin Electron shell around the existing Python sync engine. The renderer talks only
-          through a preload bridge.
-        </p>
+      <header class="topbar">
+        <div class="brand-lockup">
+          <span class="brand-mark"></span>
+          <div>
+            <p class="micro-label">Desktop shell</p>
+            <strong>Obsidian Command Terminal</strong>
+          </div>
+        </div>
+        <nav class="nav-links" aria-label="Sections">
+          <a href="#status-title">Status</a>
+          <a href="#config-title">Config</a>
+          <a href="#list-title">Library</a>
+        </nav>
+        <button id="run-sync" class="button-primary topbar-cta" type="button">Run Sync</button>
       </header>
 
-      <main class="grid">
-        <section class="panel panel-wide" aria-labelledby="status-title">
-          <div class="panel-head">
-            <h2 id="status-title">Status</h2>
-            <span id="status-badge" class="badge badge-idle">Idle</span>
-          </div>
-          <p id="status-message" class="status-message">
-            Load configuration, run sync, or inspect active notes by tag or artist.
+      <section class="hero">
+        <div class="hero-copy">
+          <p class="eyebrow">Python backend, Electron front shell</p>
+          <h1>Liked tracks, surfaced like a command palette.</h1>
+          <p class="lede">
+            The sync engine stays in Python. The desktop layer stays dark, thin, and deliberate:
+            secure preload bridge, typed subprocess runner, and focused control over config, sync,
+            and note lookup.
           </p>
-        </section>
+        </div>
 
-        <section class="panel" aria-labelledby="config-title">
-          <div class="panel-head">
-            <h2 id="config-title">Configuration</h2>
-            <button id="refresh-config" class="button button-secondary" type="button">Refresh</button>
+        <div class="hero-stage">
+          <div class="hero-panel command-panel">
+            <div class="panel-kicker">
+              <span class="status-dot status-dot-live"></span>
+              Backend path
+            </div>
+            <code class="command-line">uv run music-sync --json</code>
+            <div class="key-cluster" aria-hidden="true">
+              <span class="keycap">SYNC</span>
+              <span class="keycap">LIST</span>
+              <span class="keycap">CFG</span>
+            </div>
           </div>
-          <dl id="config-details" class="kv-list">
+
+          <div class="hero-panel status-panel" aria-labelledby="status-title">
+            <div class="panel-head">
+              <div>
+                <p class="micro-label">Runtime</p>
+                <h2 id="status-title">Bridge Status</h2>
+              </div>
+              <span id="status-badge" class="badge badge-idle">Idle</span>
+            </div>
+            <p id="status-message" class="status-message">
+              Load configuration, run sync, or inspect active notes by tag or artist.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <main class="content-grid">
+        <section class="surface-card" aria-labelledby="config-title">
+          <div class="panel-head">
+            <div>
+              <p class="micro-label">Environment</p>
+              <h2 id="config-title">Configuration</h2>
+            </div>
+            <button id="refresh-config" class="button-muted" type="button">Refresh</button>
+          </div>
+          <p class="panel-copy">
+            Safe config metadata only. Token presence is exposed, token value is not.
+          </p>
+          <dl id="config-details" class="metric-list">
             <div>
               <dt>Token</dt>
               <dd>Unknown</dd>
@@ -49,12 +95,19 @@
           </dl>
         </section>
 
-        <section class="panel" aria-labelledby="sync-title">
+        <section class="surface-card" aria-labelledby="sync-title">
           <div class="panel-head">
-            <h2 id="sync-title">Sync</h2>
-            <button id="run-sync" class="button" type="button">Run Sync</button>
+            <div>
+              <p class="micro-label">Execution</p>
+              <h2 id="sync-title">Sync Summary</h2>
+            </div>
+            <span class="dark-pill">Python owned</span>
           </div>
-          <dl id="sync-summary" class="kv-list muted">
+          <p class="panel-copy">
+            Trigger the tested backend contract from the window chrome above and read the current
+            sync envelope here.
+          </p>
+          <dl id="sync-summary" class="metric-list muted">
             <div>
               <dt>Fetched</dt>
               <dd>-</dd>
@@ -78,10 +131,17 @@
           </dl>
         </section>
 
-        <section class="panel panel-wide" aria-labelledby="list-title">
+        <section class="surface-card surface-card-wide" aria-labelledby="list-title">
           <div class="panel-head">
-            <h2 id="list-title">Active Notes</h2>
+            <div>
+              <p class="micro-label">Lookup</p>
+              <h2 id="list-title">Active Notes</h2>
+            </div>
+            <span class="dark-pill">tracks/* only</span>
           </div>
+          <p class="panel-copy">
+            Query active notes by a single tag or artist filter without touching archived files.
+          </p>
           <form id="list-form" class="list-form">
             <label>
               Filter
@@ -92,9 +152,9 @@
             </label>
             <label class="field-grow">
               Value
-              <input id="filter-value" name="value" type="text" placeholder="rock or Artist Name" />
+              <input id="filter-value" name="value" type="text" placeholder="Tag or Artist Name" />
             </label>
-            <button class="button" type="submit">List Tracks</button>
+            <button id="list-submit" class="button-primary" type="submit">List Tracks</button>
           </form>
           <div id="list-empty" class="empty-state">No query yet.</div>
           <ul id="track-results" class="results"></ul>

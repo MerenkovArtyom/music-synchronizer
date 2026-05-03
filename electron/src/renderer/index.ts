@@ -11,6 +11,7 @@ const statusBadge = document.querySelector<HTMLSpanElement>("#status-badge");
 const statusMessage = document.querySelector<HTMLParagraphElement>("#status-message");
 const refreshConfigButton = document.querySelector<HTMLButtonElement>("#refresh-config");
 const runSyncButton = document.querySelector<HTMLButtonElement>("#run-sync");
+const listSubmitButton = document.querySelector<HTMLButtonElement>("#list-submit");
 const configDetails = document.querySelector<HTMLElement>("#config-details");
 const syncSummary = document.querySelector<HTMLElement>("#sync-summary");
 const listForm = document.querySelector<HTMLFormElement>("#list-form");
@@ -39,6 +40,9 @@ function setBusy(isBusy: boolean): void {
   }
   if (runSyncButton) {
     runSyncButton.disabled = isBusy;
+  }
+  if (listSubmitButton) {
+    listSubmitButton.disabled = isBusy;
   }
 }
 
@@ -160,6 +164,7 @@ async function handleList(event: SubmitEvent): Promise<void> {
     value: filterValue.value.trim(),
   };
 
+  setBusy(true);
   updateStatus("busy", "Listing", "Querying active notes through the Python backend.");
 
   const result = await window.musicSync.listTracks(request);
@@ -175,6 +180,8 @@ async function handleList(event: SubmitEvent): Promise<void> {
     }
     updateStatus("error", "List Error", errorSummary(result));
   }
+
+  setBusy(false);
 }
 
 refreshConfigButton?.addEventListener("click", () => {
