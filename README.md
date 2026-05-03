@@ -47,3 +47,19 @@ uv run pytest
 - `system_tags` содержат теги из Яндекс Музыки, а `user_tags` предназначены для ручного редактирования и не удаляются после `sync`.
 - Команда `music-sync list --tag` ищет по объединению `system_tags` и `user_tags`.
 - Команда `music-sync list` принимает ровно один фильтр: либо `--tag`, либо `--artist`.
+
+## Electron Backend Contract
+
+- Electron `main` process should invoke the backend with `--json` and parse exactly one JSON document from stdout.
+- Supported machine-readable entrypoints are `music-sync show-config --json`, `music-sync sync --json`, and `music-sync list --json`.
+- Success payloads use a common envelope: `{"ok": true, "command": "...", "data": ...}`.
+- Failure payloads use a common envelope: `{"ok": false, "command": "...", "error": {"code": "...", "message": "...", "details": {...}}}`.
+- `sync --json` returns `summary.fetched`, `summary.written`, `summary.archived`, `summary.restored`, and `summary.removed`.
+- `show-config --json` exposes only safe config metadata, including whether a Yandex token is present; it does not echo the token value.
+- Human-readable text mode remains for terminal use and should not be scraped by Electron.
+
+## Electron Prototype
+
+- The desktop scaffold lives in `electron/`.
+- Run `cd electron && npm install && npm run dev` to open the prototype shell.
+- Desktop-specific notes, backend command overrides, and packaging follow-ups live in `electron/README.md`.

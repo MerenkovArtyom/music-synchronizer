@@ -1,0 +1,21 @@
+{
+  "name": "music-synchronizer-electron",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/main/index.cjs",
+  "scripts": {
+    "clean": "rm -rf dist",
+    "build": "npm run clean && tsc --noEmit -p tsconfig.json && node ./scripts/build.mjs",
+    "dev": "npm run build && electron .",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node --import tsx --test tests/*.test.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^24.9.1",
+    "electron": "^37.2.0",
+    "esbuild": "^0.25.11",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3"
+  }
+}

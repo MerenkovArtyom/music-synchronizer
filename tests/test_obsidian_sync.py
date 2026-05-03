@@ -68,6 +68,27 @@ def test_export_restores_archived_track_when_it_returns(tmp_path: Path) -> None:
     assert not (tmp_path / "tracks" / "_removed" / "Song - Artist.md").exists()
 
 
+def test_export_returns_summary_counts_for_written_archived_and_restored(tmp_path: Path) -> None:
+    exporter = ObsidianExporter(tmp_path)
+    synced_at = datetime(2026, 4, 24, 12, 0, tzinfo=timezone.utc)
+
+    initial_summary = exporter.sync([_track("101", 1), _track("102", 2)], synced_at=synced_at)
+    archived_summary = exporter.sync([_track("101", 1)], synced_at=synced_at)
+    restored_summary = exporter.sync([_track("101", 1), _track("102", 2)], synced_at=synced_at)
+
+    assert initial_summary.written == 2
+    assert initial_summary.archived == 0
+    assert initial_summary.restored == 0
+
+    assert archived_summary.written == 1
+    assert archived_summary.archived == 1
+    assert archived_summary.restored == 0
+
+    assert restored_summary.written == 2
+    assert restored_summary.archived == 0
+    assert restored_summary.restored == 1
+
+
 def test_export_uses_title_and_artist_when_titles_conflict(tmp_path: Path) -> None:
     exporter = ObsidianExporter(tmp_path)
     synced_at = datetime(2026, 4, 24, 12, 0, tzinfo=timezone.utc)

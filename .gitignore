@@ -8,7 +8,10 @@ __pycache__/
 htmlcov/
 .DS_Store
 .env
+electron/node_modules/
+electron/dist/
 storyline.local.md
 storyline-*.md
 *.storyline.md
 DESIGN.md
+docs/superpowers/plans

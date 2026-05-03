@@ -24,3 +24,18 @@ class SavedTrackInfo:
     title: str
     artists: list[str]
     tags: list[str]
+
+
+@dataclass(frozen=True, slots=True)
+class ExporterSyncSummary:
+    written: int
+    archived: int
+    restored: int
+
+
+@dataclass(frozen=True, slots=True)
+class SyncSummary:
+    fetched: int
+    written: int
+    archived: int
+    restored: int

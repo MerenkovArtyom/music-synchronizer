@@ -5,7 +5,7 @@ from datetime import datetime
 from pathlib import Path
 import re
 
-from music_synchronizer.models import SavedTrackInfo, TrackInfo
+from music_synchronizer.models import ExporterSyncSummary, SavedTrackInfo, TrackInfo
 
 
 class ObsidianExporter:
@@ -14,7 +14,7 @@ class ObsidianExporter:
         self.tracks_dir = vault_path / "tracks"
         self.removed_dir = self.tracks_dir / "_removed"
 
-    def sync(self, tracks: list[TrackInfo], synced_at: datetime) -> None:
+    def sync(self, tracks: list[TrackInfo], synced_at: datetime) -> ExporterSyncSummary:
         self.vault_path.mkdir(parents=True, exist_ok=True)
         self.tracks_dir.mkdir(parents=True, exist_ok=True)
         self.removed_dir.mkdir(parents=True, exist_ok=True)
@@ -22,6 +22,16 @@ class ObsidianExporter:
 
         active_ids = {track.track_id for track in tracks}
         managed_files = self._scan_managed_files()
+        restored_count = sum(
+            1
+            for track_id, path in managed_files.items()
+            if track_id in active_ids and path.parent == self.removed_dir
+        )
+        archived_count = sum(
+            1
+            for track_id, path in managed_files.items()
+            if track_id not in active_ids and path.parent == self.tracks_dir
+        )
         existing_user_tags = {
             track_id: self._read_user_tags(path)
             for track_id, path in managed_files.items()
@@ -58,6 +68,12 @@ class ObsidianExporter:
         for staged_file in staging_dir.glob("*.md"):
             staged_file.unlink()
         staging_dir.rmdir()
+
+        return ExporterSyncSummary(
+            written=len(tracks),
+            archived=archived_count,
+            restored=restored_count,
+        )
 
     def list_tracks_by_tag(self, tag: str) -> list[SavedTrackInfo]:
         normalized_tag = tag.strip().casefold()
