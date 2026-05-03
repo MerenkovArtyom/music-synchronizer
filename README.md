@@ -16,7 +16,7 @@ uv run pytest
 - `uv run music-sync --help` — показать доступные команды
 - `uv run music-sync show-config` — проверить, что конфигурация читается
 - `uv run music-sync sync` — синхронизировать `Любимые треки` в Obsidian
-- `uv run music-sync list --tag rock` — вывести активные сохранённые треки с указанным тегом
+- `uv run music-sync list --tag "tag"` — вывести активные сохранённые треки с указанным тегом
 - `uv run music-sync list --artist "Artist Name"` — вывести активные сохранённые треки с указанным артистом
 - `uv run pytest -v` — прогнать тесты
 
