@@ -5,7 +5,7 @@ from music_synchronizer.models import TrackInfo
 from music_synchronizer.obsidian import ObsidianExporter
 
 
-def _track(track_id: str, position: int, title: str = "Song") -> TrackInfo:
+def _track(track_id: str, position: int, title: str = "Song", monthly_listens: int | None = None) -> TrackInfo:
     return TrackInfo(
         track_id=track_id,
         title=title,
@@ -17,6 +17,7 @@ def _track(track_id: str, position: int, title: str = "Song") -> TrackInfo:
         duration_seconds=180,
         source_position=position,
         yandex_url=f"https://music.yandex.ru/track/{track_id}",
+        monthly_listens=monthly_listens,
     )
 
 
@@ -34,11 +35,13 @@ def test_export_writes_playlist_and_track_notes(tmp_path: Path) -> None:
     assert "user_tags: []" in track_note
     assert "\ntags:" not in track_note
     assert "year: 2024" in track_note
+    assert "monthly_listens: null" in track_note
     assert 'cover_url: "https://avatars.yandex.net/get-music-content/cover.jpg"' in track_note
     assert 'source: "likes"' in track_note
     assert 'synced_at: "2026-04-24T12:00:00+00:00"' in track_note
     assert "# First" in track_note
     assert "Year: 2024" in track_note
+    assert "Monthly listens (30d): -" in track_note
     assert "Duration: 3:00" in track_note
     assert "![Album cover](https://avatars.yandex.net/get-music-content/cover.jpg)" in track_note
     assert "https://music.yandex.ru/track/101" in track_note
@@ -309,5 +312,18 @@ def test_export_skips_cover_image_and_uses_fallback_values_when_metadata_missing
     assert "year: null" in track_note
     assert 'cover_url: ""' in track_note
     assert "Year: -" in track_note
+    assert "Monthly listens (30d): -" in track_note
     assert "Duration: 1:05" in track_note
     assert "![Album cover]" not in track_note
+
+
+def test_export_writes_monthly_listens_when_available(tmp_path: Path) -> None:
+    exporter = ObsidianExporter(tmp_path)
+    synced_at = datetime(2026, 4, 24, 12, 0, tzinfo=timezone.utc)
+
+    exporter.sync([_track("101", 1, "First", monthly_listens=7)], synced_at=synced_at)
+
+    track_note = (tmp_path / "tracks" / "First.md").read_text(encoding="utf-8")
+
+    assert "monthly_listens: 7" in track_note
+    assert "Monthly listens (30d): 7" in track_note

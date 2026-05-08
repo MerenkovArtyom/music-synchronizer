@@ -13,6 +13,7 @@ class TrackInfo:
     duration_seconds: int
     source_position: int
     yandex_url: str
+    monthly_listens: int | None = None
 
     @property
     def filename(self) -> str:

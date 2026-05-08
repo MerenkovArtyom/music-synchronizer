@@ -102,6 +102,10 @@ class ObsidianExporter:
         system_tags = self._normalize_tags(track.tags)
         user_tags = self._normalize_tags(user_tags)
         year_value = str(track.year) if track.year is not None else "null"
+        monthly_listens_value = (
+            str(track.monthly_listens) if track.monthly_listens is not None else "null"
+        )
+        monthly_listens_text = str(track.monthly_listens) if track.monthly_listens is not None else "-"
         duration_text = self._format_duration(track.duration_seconds)
         lines = [
             "---",
@@ -112,6 +116,7 @@ class ObsidianExporter:
             f"system_tags: [{', '.join(self._quote_yaml(tag) for tag in system_tags)}]",
             f"user_tags: [{', '.join(self._quote_yaml(tag) for tag in user_tags)}]",
             f"year: {year_value}",
+            f"monthly_listens: {monthly_listens_value}",
             f'cover_url: "{self._escape_yaml(track.cover_url)}"',
             f"duration_seconds: {track.duration_seconds}",
             f"position: {track.source_position}",
@@ -125,6 +130,7 @@ class ObsidianExporter:
             f"Artists: {artists}",
             f"Album: {track.album or '-'}",
             f"Year: {track.year if track.year is not None else '-'}",
+            f"Monthly listens (30d): {monthly_listens_text}",
             f"Duration: {duration_text}",
             f"Yandex Music: {track.yandex_url}",
             "",

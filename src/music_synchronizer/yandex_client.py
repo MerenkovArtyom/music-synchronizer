@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime, timedelta
 from importlib import import_module
 from typing import Any
 
@@ -10,18 +11,28 @@ class YandexMusicClient:
     def __init__(self, token: str) -> None:
         self.token = token
 
-    def fetch_liked_tracks(self) -> list[TrackInfo]:
+    def fetch_liked_tracks(self, reference_time: datetime | None = None) -> list[TrackInfo]:
         client_class = self._load_client_class()
         raw_client = client_class(self.token)
         client = raw_client.init() if hasattr(raw_client, "init") else raw_client
+        if reference_time is None:
+            reference_time = datetime.now().astimezone()
+
         likes = client.users_likes_tracks()
+        monthly_listens = self._fetch_monthly_listens(client, reference_time)
 
         raw_tracks = getattr(likes, "tracks", likes)
         tracks: list[TrackInfo] = []
 
         for index, track_short in enumerate(raw_tracks, start=1):
             full_track = track_short.fetch_track() if hasattr(track_short, "fetch_track") else track_short
-            tracks.append(self._normalize_track(full_track, position=index))
+            tracks.append(
+                self._normalize_track(
+                    full_track,
+                    position=index,
+                    monthly_listens=monthly_listens.get(str(getattr(full_track, "id"))),
+                )
+            )
 
         return tracks
 
@@ -35,7 +46,7 @@ class YandexMusicClient:
 
         return module.Client
 
-    def _normalize_track(self, track: Any, position: int) -> TrackInfo:
+    def _normalize_track(self, track: Any, position: int, monthly_listens: int | None = None) -> TrackInfo:
         track_id = str(track.id)
         artists = [artist.name for artist in getattr(track, "artists", []) if getattr(artist, "name", None)]
         albums = getattr(track, "albums", [])
@@ -63,7 +74,64 @@ class YandexMusicClient:
             duration_seconds=duration_ms // 1000,
             source_position=position,
             yandex_url=yandex_url,
+            monthly_listens=monthly_listens,
         )
+
+    def _fetch_monthly_listens(self, client: Any, reference_time: datetime) -> dict[str, int]:
+        if not hasattr(client, "music_history"):
+            raise RuntimeError(
+                "Unable to compute 30-day listen counts: Yandex Music client does not expose listening history."
+            )
+
+        try:
+            history = client.music_history()
+        except Exception as error:
+            raise RuntimeError(
+                "Unable to compute 30-day listen counts from Yandex Music listening history."
+            ) from error
+
+        history_tabs = getattr(history, "history_tabs", None)
+        if history_tabs is None:
+            raise RuntimeError(
+                "Unable to compute 30-day listen counts: Yandex Music listening history is unavailable."
+            )
+
+        window_start = reference_time.date() - timedelta(days=29)
+        window_end = reference_time.date()
+        monthly_listens: dict[str, int] = {}
+
+        for tab in history_tabs:
+            raw_date = getattr(tab, "date", None)
+            if not isinstance(raw_date, str):
+                raise RuntimeError(
+                    "Unable to compute 30-day listen counts: Yandex Music history contains an invalid date."
+                )
+
+            try:
+                tab_date = datetime.fromisoformat(raw_date).date()
+            except ValueError as error:
+                raise RuntimeError(
+                    "Unable to compute 30-day listen counts: Yandex Music history contains an invalid date."
+                ) from error
+
+            if tab_date < window_start or tab_date > window_end:
+                continue
+
+            for group in getattr(tab, "items", []) or []:
+                for track_item in getattr(group, "tracks", []) or []:
+                    if getattr(track_item, "type", None) != "track":
+                        continue
+
+                    data = getattr(track_item, "data", None)
+                    item_id = getattr(data, "item_id", None)
+                    track_id = getattr(item_id, "track_id", None)
+                    if not isinstance(track_id, str) or not track_id.strip():
+                        continue
+
+                    normalized_track_id = track_id.strip()
+                    monthly_listens[normalized_track_id] = monthly_listens.get(normalized_track_id, 0) + 1
+
+        return monthly_listens
 
     def _extract_tags(self, track: Any, primary_album: Any) -> list[str]:
         meta_data = getattr(track, "meta_data", None)

@@ -14,6 +14,7 @@ class SyncService:
         self.exporter = ObsidianExporter(settings.obsidian_vault_path)
 
     def run(self) -> int:
-        tracks = self.client.fetch_liked_tracks()
-        self.exporter.sync(tracks, synced_at=datetime.now(timezone.utc))
+        synced_at = datetime.now(timezone.utc)
+        tracks = self.client.fetch_liked_tracks(reference_time=synced_at)
+        self.exporter.sync(tracks, synced_at=synced_at)
         return len(tracks)

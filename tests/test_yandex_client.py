@@ -1,4 +1,5 @@
 import sys
+from datetime import datetime, timezone
 from types import ModuleType, SimpleNamespace
 
 import pytest
@@ -48,6 +49,9 @@ def test_fetch_liked_tracks_normalizes_response(monkeypatch: pytest.MonkeyPatch)
 
         def users_likes_tracks(self) -> list[_FakeTrackShort]:
             return likes_payload
+
+        def music_history(self) -> SimpleNamespace:
+            return SimpleNamespace(history_tabs=[])
 
     fake_module.Client = FakeClient
     monkeypatch.setitem(sys.modules, "yandex_music", fake_module)
@@ -102,6 +106,9 @@ def test_fetch_liked_tracks_normalizes_missing_or_duplicate_genre_tags(
         def users_likes_tracks(self) -> list[_FakeTrackShort]:
             return [_FakeTrackShort(full_track)]
 
+        def music_history(self) -> SimpleNamespace:
+            return SimpleNamespace(history_tabs=[])
+
     fake_module.Client = FakeClient
     monkeypatch.setitem(sys.modules, "yandex_music", fake_module)
 
@@ -134,6 +141,9 @@ def test_fetch_liked_tracks_falls_back_to_album_year_and_handles_missing_cover(
         def users_likes_tracks(self) -> list[_FakeTrackShort]:
             return [_FakeTrackShort(full_track)]
 
+        def music_history(self) -> SimpleNamespace:
+            return SimpleNamespace(history_tabs=[])
+
     fake_module.Client = FakeClient
     monkeypatch.setitem(sys.modules, "yandex_music", fake_module)
 
@@ -165,3 +175,181 @@ def test_fetch_liked_tracks_raises_clear_error_when_dependency_missing(
 
     with pytest.raises(RuntimeError, match="Install the 'yandex-music' package"):
         client.fetch_liked_tracks()
+
+
+def test_fetch_liked_tracks_populates_monthly_listens_from_recent_history(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake_module = ModuleType("yandex_music")
+    now = datetime(2026, 5, 8, 12, 0, tzinfo=timezone.utc)
+
+    liked_track = SimpleNamespace(
+        id=321,
+        title="History Song",
+        artists=[SimpleNamespace(name="Artist")],
+        albums=[SimpleNamespace(id=77, title="Best Album", year=2020)],
+        meta_data=SimpleNamespace(genre="indie"),
+        year=2024,
+        duration_ms=245000,
+    )
+
+    second_track = SimpleNamespace(
+        id=654,
+        title="Second Song",
+        artists=[SimpleNamespace(name="Other Artist")],
+        albums=[SimpleNamespace(id=88, title="Second Album", year=2019)],
+        meta_data=SimpleNamespace(genre="electronic"),
+        year=2023,
+        duration_ms=180000,
+    )
+
+    recent_day = SimpleNamespace(
+        date="2026-05-07",
+        items=[
+            SimpleNamespace(
+                tracks=[
+                    SimpleNamespace(
+                        type="track",
+                        data=SimpleNamespace(item_id=SimpleNamespace(track_id="321")),
+                    ),
+                    SimpleNamespace(
+                        type="track",
+                        data=SimpleNamespace(item_id=SimpleNamespace(track_id="321")),
+                    ),
+                    SimpleNamespace(
+                        type="track",
+                        data=SimpleNamespace(item_id=SimpleNamespace(track_id="654")),
+                    ),
+                ]
+            )
+        ],
+    )
+    old_day = SimpleNamespace(
+        date="2026-04-01",
+        items=[
+            SimpleNamespace(
+                tracks=[
+                    SimpleNamespace(
+                        type="track",
+                        data=SimpleNamespace(item_id=SimpleNamespace(track_id="321")),
+                    )
+                ]
+            )
+        ],
+    )
+    mixed_day = SimpleNamespace(
+        date="2026-05-08",
+        items=[
+            SimpleNamespace(
+                tracks=[
+                    SimpleNamespace(
+                        type="album",
+                        data=SimpleNamespace(item_id=SimpleNamespace(id="album-1")),
+                    ),
+                    SimpleNamespace(
+                        type="track",
+                        data=SimpleNamespace(item_id=SimpleNamespace(track_id="321")),
+                    ),
+                ]
+            )
+        ],
+    )
+
+    history = SimpleNamespace(history_tabs=[recent_day, old_day, mixed_day])
+
+    class FakeClient:
+        def __init__(self, token: str) -> None:
+            self.token = token
+
+        def init(self) -> "FakeClient":
+            return self
+
+        def users_likes_tracks(self) -> list[_FakeTrackShort]:
+            return [_FakeTrackShort(liked_track), _FakeTrackShort(second_track)]
+
+        def music_history(self) -> SimpleNamespace:
+            return history
+
+    fake_module.Client = FakeClient
+    monkeypatch.setitem(sys.modules, "yandex_music", fake_module)
+
+    client = YandexMusicClient(token="token")
+
+    tracks = client.fetch_liked_tracks(reference_time=now)
+
+    assert tracks[0].monthly_listens == 3
+    assert tracks[1].monthly_listens == 1
+
+
+def test_fetch_liked_tracks_raises_clear_error_when_history_is_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake_module = ModuleType("yandex_music")
+
+    full_track = SimpleNamespace(
+        id=321,
+        title="My Song",
+        artists=[SimpleNamespace(name="First")],
+        albums=[SimpleNamespace(id=77, title="Best Album", year=2020)],
+        meta_data=SimpleNamespace(genre="indie"),
+        year=2024,
+        duration_ms=245000,
+    )
+
+    class FakeClient:
+        def __init__(self, token: str) -> None:
+            self.token = token
+
+        def init(self) -> "FakeClient":
+            return self
+
+        def users_likes_tracks(self) -> list[_FakeTrackShort]:
+            return [_FakeTrackShort(full_track)]
+
+        def music_history(self) -> None:
+            raise RuntimeError("history unavailable")
+
+    fake_module.Client = FakeClient
+    monkeypatch.setitem(sys.modules, "yandex_music", fake_module)
+
+    client = YandexMusicClient(token="token")
+
+    with pytest.raises(RuntimeError, match="Unable to compute 30-day listen counts"):
+        client.fetch_liked_tracks(reference_time=datetime(2026, 5, 8, 12, 0, tzinfo=timezone.utc))
+
+
+def test_fetch_liked_tracks_raises_clear_error_when_history_shape_is_unusable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake_module = ModuleType("yandex_music")
+
+    full_track = SimpleNamespace(
+        id=321,
+        title="My Song",
+        artists=[SimpleNamespace(name="First")],
+        albums=[SimpleNamespace(id=77, title="Best Album", year=2020)],
+        meta_data=SimpleNamespace(genre="indie"),
+        year=2024,
+        duration_ms=245000,
+    )
+
+    class FakeClient:
+        def __init__(self, token: str) -> None:
+            self.token = token
+
+        def init(self) -> "FakeClient":
+            return self
+
+        def users_likes_tracks(self) -> list[_FakeTrackShort]:
+            return [_FakeTrackShort(full_track)]
+
+        def music_history(self) -> SimpleNamespace:
+            return SimpleNamespace(history_tabs=[SimpleNamespace(date="not-a-date", items=[])])
+
+    fake_module.Client = FakeClient
+    monkeypatch.setitem(sys.modules, "yandex_music", fake_module)
+
+    client = YandexMusicClient(token="token")
+
+    with pytest.raises(RuntimeError, match="Unable to compute 30-day listen counts"):
+        client.fetch_liked_tracks(reference_time=datetime(2026, 5, 8, 12, 0, tzinfo=timezone.utc))
