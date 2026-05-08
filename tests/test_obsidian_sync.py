@@ -25,7 +25,7 @@ def test_export_writes_playlist_and_track_notes(tmp_path: Path) -> None:
     exporter = ObsidianExporter(tmp_path)
     synced_at = datetime(2026, 4, 24, 12, 0, tzinfo=timezone.utc)
 
-    exporter.sync([_track("101", 1, "First"), _track("102", 2, "Second")], synced_at=synced_at)
+    summary = exporter.sync([_track("101", 1, "First"), _track("102", 2, "Second")], synced_at=synced_at)
 
     track_note = (tmp_path / "tracks" / "First.md").read_text(encoding="utf-8")
 
@@ -45,6 +45,9 @@ def test_export_writes_playlist_and_track_notes(tmp_path: Path) -> None:
     assert "Duration: 3:00" in track_note
     assert "![Album cover](https://avatars.yandex.net/get-music-content/cover.jpg)" in track_note
     assert "https://music.yandex.ru/track/101" in track_note
+    assert summary.added == 2
+    assert summary.unchanged == 0
+    assert summary.removed == 0
 
 
 def test_export_moves_removed_tracks_to_archive(tmp_path: Path) -> None:
@@ -327,3 +330,74 @@ def test_export_writes_monthly_listens_when_available(tmp_path: Path) -> None:
 
     assert "monthly_listens: 7" in track_note
     assert "Monthly listens (30d): 7" in track_note
+
+
+def test_export_reuses_snapshot_and_skips_unchanged_rewrite(tmp_path: Path) -> None:
+    exporter = ObsidianExporter(tmp_path)
+    first_synced_at = datetime(2026, 4, 24, 12, 0, tzinfo=timezone.utc)
+    second_synced_at = datetime(2026, 4, 25, 12, 0, tzinfo=timezone.utc)
+
+    first_summary = exporter.sync([_track("101", 1, "First")], synced_at=first_synced_at)
+    second_summary = exporter.sync([_track("101", 1, "First")], synced_at=second_synced_at)
+
+    track_note = (tmp_path / "tracks" / "First.md").read_text(encoding="utf-8")
+    snapshot = (tmp_path / ".music_sync_snapshot.json").read_text(encoding="utf-8")
+
+    assert first_summary.added == 1
+    assert first_summary.unchanged == 0
+    assert first_summary.removed == 0
+    assert second_summary.added == 0
+    assert second_summary.unchanged == 1
+    assert second_summary.removed == 0
+    assert 'synced_at: "2026-04-24T12:00:00+00:00"' in track_note
+    assert '"101"' in snapshot
+
+
+def test_export_counts_new_removed_and_changed_tracks_from_snapshot(tmp_path: Path) -> None:
+    exporter = ObsidianExporter(tmp_path)
+    first_synced_at = datetime(2026, 4, 24, 12, 0, tzinfo=timezone.utc)
+    second_synced_at = datetime(2026, 4, 25, 12, 0, tzinfo=timezone.utc)
+
+    exporter.sync([_track("101", 1, "First"), _track("102", 2, "Second")], synced_at=first_synced_at)
+    summary = exporter.sync(
+        [
+            TrackInfo(
+                track_id="101",
+                title="First",
+                artists=["Artist"],
+                album="Album Deluxe",
+                tags=["indie"],
+                year=2024,
+                cover_url="https://avatars.yandex.net/get-music-content/cover.jpg",
+                duration_seconds=180,
+                source_position=1,
+                yandex_url="https://music.yandex.ru/track/101",
+            ),
+            _track("103", 2, "Third"),
+        ],
+        synced_at=second_synced_at,
+    )
+
+    changed_note = (tmp_path / "tracks" / "First.md").read_text(encoding="utf-8")
+
+    assert summary.added == 1
+    assert summary.unchanged == 0
+    assert summary.removed == 1
+    assert "Album: Album Deluxe" in changed_note
+    assert not (tmp_path / "tracks" / "Second.md").exists()
+    assert (tmp_path / "tracks" / "_removed" / "Second.md").exists()
+
+
+def test_export_restores_removed_track_as_added(tmp_path: Path) -> None:
+    exporter = ObsidianExporter(tmp_path)
+    synced_at = datetime(2026, 4, 24, 12, 0, tzinfo=timezone.utc)
+
+    exporter.sync([_track("101", 1, "First"), _track("102", 2, "Second")], synced_at=synced_at)
+    exporter.sync([_track("101", 1, "First")], synced_at=synced_at)
+    summary = exporter.sync([_track("101", 1, "First"), _track("102", 2, "Second")], synced_at=synced_at)
+
+    assert summary.added == 1
+    assert summary.unchanged == 1
+    assert summary.removed == 0
+    assert (tmp_path / "tracks" / "Second.md").exists()
+    assert not (tmp_path / "tracks" / "_removed" / "Second.md").exists()

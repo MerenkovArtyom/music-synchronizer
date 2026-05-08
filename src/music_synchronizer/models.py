@@ -25,3 +25,10 @@ class SavedTrackInfo:
     title: str
     artists: list[str]
     tags: list[str]
+
+
+@dataclass(frozen=True, slots=True)
+class SyncSummary:
+    added: int
+    unchanged: int
+    removed: int

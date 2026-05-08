@@ -20,12 +20,14 @@ def sync() -> None:
     settings = Settings()
 
     try:
-        synced_count = SyncService(settings).run()
+        summary = SyncService(settings).run()
     except RuntimeError as error:
         typer.secho(f"Sync failed: {error}", fg=typer.colors.RED, err=True)
         raise typer.Exit(code=1) from error
 
-    typer.echo(f"Synchronized {synced_count} tracks.")
+    typer.echo(
+        f"Added: {summary.added}, unchanged: {summary.unchanged}, removed: {summary.removed}."
+    )
 
 
 @app.command(
