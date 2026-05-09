@@ -48,3 +48,10 @@ uv run pytest
 - `system_tags` содержат теги из Яндекс Музыки, а `user_tags` предназначены для ручного редактирования и не удаляются после `sync`.
 - Команда `music-sync list --tag` ищет по объединению `system_tags` и `user_tags`.
 - Команда `music-sync list` принимает ровно один фильтр: либо `--tag`, либо `--artist`.
+
+## Electron Prototype
+
+- The desktop scaffold lives in `electron/`.
+- Run `cd electron && npm install && npm run dev` to open the prototype shell.
+- The Electron layer intentionally adapts to the existing Python CLI output from `main`; it does not replace or reshape the sync logic.
+- Desktop-specific notes, backend command overrides, and packaging follow-ups live in `electron/README.md`.
