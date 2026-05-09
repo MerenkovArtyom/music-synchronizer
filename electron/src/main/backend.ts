@@ -4,6 +4,7 @@ import type {
   BackendCommand,
   BackendEnvelope,
   ConfigData,
+  DashboardData,
   ListData,
   ListTracksRequest,
   MonthlyTopData,
@@ -11,12 +12,13 @@ import type {
   TopListenRequest,
 } from "../shared/contracts.js";
 
-type BackendData = ConfigData | SyncData | ListData | MonthlyTopData;
+type BackendData = ConfigData | SyncData | ListData | MonthlyTopData | DashboardData;
 type CommandDataMap = {
   "show-config": ConfigData;
   sync: SyncData;
   list: ListData;
   "top-listen": MonthlyTopData;
+  dashboard: DashboardData;
 };
 
 export interface BackendRuntimeEnv extends NodeJS.ProcessEnv {
@@ -244,6 +246,219 @@ function parseTopListenOutput(request: TopListenRequest | undefined, stdout: str
   };
 }
 
+function parseDashboardTrackValue(
+  rawValue: string,
+): DashboardData["summary"]["mostListenedTrack"] | DashboardData["summary"]["longestTrack"] {
+  const [head = "", detail = ""] = rawValue.split(" | ", 2);
+  const [title = "", artistsText = ""] = head.split(" - ", 2);
+  const artists =
+    artistsText.trim() === ""
+      ? []
+      : artistsText
+          .split(",")
+          .map((artist) => artist.trim())
+          .filter((artist) => artist !== "");
+
+  if (detail.startsWith("monthly_listens=")) {
+    const monthlyListens = Number(detail.slice("monthly_listens=".length));
+    if (!Number.isFinite(monthlyListens)) {
+      throw new BackendRunnerError(
+        "BACKEND_INVALID_OUTPUT",
+        "dashboard output contained an invalid track summary.",
+        { rawValue },
+      );
+    }
+
+    return {
+      title: title.trim(),
+      artists,
+      monthlyListens,
+    };
+  }
+
+  if (detail.startsWith("duration=")) {
+    return {
+      title: title.trim(),
+      artists,
+      duration: detail.slice("duration=".length).trim(),
+    };
+  }
+
+  throw new BackendRunnerError(
+    "BACKEND_INVALID_OUTPUT",
+    "dashboard output contained an invalid track summary.",
+    { rawValue },
+  );
+}
+
+function parseDashboardArtistValue(
+  rawValue: string,
+): NonNullable<DashboardData["summary"]["mostListenedArtist"]> {
+  const match = /^(.*?) \| monthly_listens=(\d+) \| tracks=(\d+)$/.exec(rawValue);
+  if (!match) {
+    throw new BackendRunnerError(
+      "BACKEND_INVALID_OUTPUT",
+      "dashboard output contained an invalid artist summary.",
+      { rawValue },
+    );
+  }
+
+  return {
+    name: match[1].trim(),
+    monthlyListens: Number(match[2]),
+    tracks: Number(match[3]),
+  };
+}
+
+function parseDashboardTagValue(rawValue: string): NonNullable<DashboardData["summary"]["mostUsedTag"]> {
+  const match = /^(.*?) \| tracks=(\d+)$/.exec(rawValue);
+  if (!match) {
+    throw new BackendRunnerError(
+      "BACKEND_INVALID_OUTPUT",
+      "dashboard output contained an invalid tag summary.",
+      { rawValue },
+    );
+  }
+
+  return {
+    name: match[1].trim(),
+    tracks: Number(match[2]),
+  };
+}
+
+function parseDashboardTopArtistLine(line: string): DashboardData["topArtists"][number] {
+  const match = /^\d+\.\s+(.*?) \| monthly_listens=(\d+) \| tracks=(\d+)$/.exec(line);
+  if (!match) {
+    throw new BackendRunnerError(
+      "BACKEND_INVALID_OUTPUT",
+      "dashboard output contained an invalid top artist line.",
+      { line },
+    );
+  }
+
+  return {
+    name: match[1].trim(),
+    monthlyListens: Number(match[2]),
+    tracks: Number(match[3]),
+  };
+}
+
+function parseDashboardTopTagLine(line: string): DashboardData["topTags"][number] {
+  const match = /^\d+\.\s+(.*?) \| tracks=(\d+)$/.exec(line);
+  if (!match) {
+    throw new BackendRunnerError(
+      "BACKEND_INVALID_OUTPUT",
+      "dashboard output contained an invalid top tag line.",
+      { line },
+    );
+  }
+
+  return {
+    name: match[1].trim(),
+    tracks: Number(match[2]),
+  };
+}
+
+function parseDashboardOutput(stdout: string): DashboardData {
+  const lines = stdout
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line !== "");
+
+  const firstLine = lines[0] ?? "";
+  if (!firstLine.startsWith("Dashboard updated: ")) {
+    throw new BackendRunnerError(
+      "BACKEND_INVALID_OUTPUT",
+      "dashboard output did not include the expected path line.",
+      { stdout },
+    );
+  }
+
+  const path = firstLine.slice("Dashboard updated: ".length).trim();
+  const scalarValues = new Map<string, string>();
+  const topTags: DashboardData["topTags"] = [];
+  const topArtists: DashboardData["topArtists"] = [];
+  let section: "top_tags" | "top_artists" | null = null;
+
+  for (const line of lines.slice(1)) {
+    if (line === "top_tags:") {
+      section = "top_tags";
+      continue;
+    }
+    if (line === "top_artists:") {
+      section = "top_artists";
+      continue;
+    }
+    if (/^\d+\.\s+/.test(line)) {
+      if (section === "top_tags") {
+        topTags.push(parseDashboardTopTagLine(line));
+        continue;
+      }
+      if (section === "top_artists") {
+        topArtists.push(parseDashboardTopArtistLine(line));
+        continue;
+      }
+    }
+
+    const separatorIndex = line.indexOf("=");
+    if (separatorIndex <= 0) {
+      throw new BackendRunnerError(
+        "BACKEND_INVALID_OUTPUT",
+        "dashboard output contained an invalid scalar line.",
+        { line },
+      );
+    }
+    const key = line.slice(0, separatorIndex);
+    const value = line.slice(separatorIndex + 1);
+    scalarValues.set(key, value);
+  }
+
+  const numberValue = (key: string): number => {
+    const rawValue = scalarValues.get(key);
+    const parsed = Number(rawValue);
+    if (rawValue === undefined || !Number.isFinite(parsed)) {
+      throw new BackendRunnerError(
+        "BACKEND_INVALID_OUTPUT",
+        "dashboard output contained an invalid numeric value.",
+        { key, rawValue },
+      );
+    }
+    return parsed;
+  };
+
+  const requiredValue = (key: string): string => {
+    const rawValue = scalarValues.get(key);
+    if (rawValue === undefined) {
+      throw new BackendRunnerError(
+        "BACKEND_INVALID_OUTPUT",
+        "dashboard output did not include a required value.",
+        { key },
+      );
+    }
+    return rawValue.trim();
+  };
+
+  return {
+    path,
+    summary: {
+      likedTracks: numberValue("liked_tracks"),
+      removedTracks: numberValue("removed_tracks"),
+      totalTracks: numberValue("total_tracks"),
+      totalDuration: requiredValue("total_duration"),
+      monthlyListensKnown: numberValue("monthly_listens_known"),
+      monthlyListensCoveragePercent: numberValue("monthly_listens_coverage_percent"),
+      averageMonthlyListens: numberValue("average_monthly_listens"),
+      medianMonthlyListens: numberValue("median_monthly_listens"),
+      mostListenedTrack: parseDashboardTrackValue(requiredValue("most_listened_track")) as DashboardData["summary"]["mostListenedTrack"],
+      mostListenedArtist: parseDashboardArtistValue(requiredValue("most_listened_artist")),
+      mostUsedTag: parseDashboardTagValue(requiredValue("most_used_tag")),
+      longestTrack: parseDashboardTrackValue(requiredValue("longest_track")) as DashboardData["summary"]["longestTrack"],
+    },
+    topTags,
+    topArtists,
+  };
+}
+
 function normalizeBackendError(
   command: BackendCommand,
   code: string,
@@ -270,9 +485,9 @@ export function normalizeBackendEnvelope(
   const listRequest =
     command === "list" ? (request as ListTracksRequest | undefined) : undefined;
   const resolvedTopListenRequest =
-    command === "top-listen"
-      ? topListenRequest ?? (request as TopListenRequest | undefined)
-      : undefined;
+      command === "top-listen"
+        ? topListenRequest ?? (request as TopListenRequest | undefined)
+        : undefined;
   const trimmed = result.stdout.trim();
   if ((result.exitCode ?? 1) !== 0) {
     const message = result.stderr.trim() || trimmed || `Backend exited with code ${String(result.exitCode)}`;
@@ -280,9 +495,11 @@ export function normalizeBackendEnvelope(
       command === "sync"
         ? "SYNC_FAILED"
         : command === "list"
-          ? "LIST_FAILED"
-          : command === "top-listen"
-            ? "TOP_LISTEN_FAILED"
+        ? "LIST_FAILED"
+        : command === "top-listen"
+          ? "TOP_LISTEN_FAILED"
+          : command === "dashboard"
+            ? "DASHBOARD_FAILED"
             : "SHOW_CONFIG_FAILED";
 
     return normalizeBackendError(command, code, message, {
@@ -307,7 +524,9 @@ export function normalizeBackendEnvelope(
           ? parseSyncOutput(trimmed)
           : command === "list"
             ? parseListOutput(listRequest, trimmed)
-            : parseTopListenOutput(resolvedTopListenRequest, trimmed);
+            : command === "top-listen"
+              ? parseTopListenOutput(resolvedTopListenRequest, trimmed)
+              : parseDashboardOutput(trimmed);
 
     return {
       ok: true,

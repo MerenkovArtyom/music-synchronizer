@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from music_synchronizer.config import Settings
-from music_synchronizer.models import MonthlyTopEntry, SavedTrackInfo, TrackInfo, SyncSummary
+from music_synchronizer.models import DashboardData, MonthlyTopEntry, SavedTrackInfo, TrackInfo, SyncSummary
 from music_synchronizer.obsidian import ObsidianExporter
 from music_synchronizer.yandex_client import YandexMusicClient
 
@@ -20,6 +20,12 @@ class SyncService:
         synced_at = datetime.now(timezone.utc)
         tracks = self.client.fetch_liked_tracks(reference_time=synced_at)
         return self.exporter.sync(tracks, synced_at=synced_at)
+
+    def dashboard_data(self) -> DashboardData:
+        return self.exporter.dashboard_data()
+
+    def refresh_dashboard(self) -> DashboardData:
+        return self.exporter.refresh_dashboard()
 
     def top_listen_entries(self, *, most: bool) -> list[MonthlyTopEntry]:
         tracks = self.exporter.top_listen_tracks()

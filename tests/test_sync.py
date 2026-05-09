@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 
 from music_synchronizer.config import Settings
+from music_synchronizer.models import DashboardData, DashboardStatEntry, TrackDashboardEntry
 from music_synchronizer.models import TrackInfo
 from music_synchronizer.sync import MONTHLY_TOP_LIMIT, SyncService
 
@@ -109,3 +110,83 @@ def test_monthly_top_report_sends_missing_positions_to_end_of_ties(monkeypatch) 
         "Known Position",
         "Missing Position",
     ]
+
+
+def test_dashboard_data_uses_only_local_exporter_data(monkeypatch) -> None:
+    service = SyncService(Settings.model_construct(yandex_music_token="token"))
+    dashboard = DashboardData(
+        liked_tracks_count=2,
+        removed_tracks_count=1,
+        total_tracks_count=3,
+        total_duration_seconds=360,
+        total_duration_text="6:00",
+        monthly_listens_known_count=2,
+        monthly_listens_coverage_percent=100.0,
+        average_monthly_listens=5.0,
+        median_monthly_listens=5.0,
+        most_listened_track=TrackDashboardEntry(
+            title="First Song",
+            artists=["Artist 1"],
+            monthly_listens=7,
+            duration_seconds=180,
+            duration_text="3:00",
+        ),
+        most_listened_artist=DashboardStatEntry(
+            name="Artist 1",
+            count=1,
+            monthly_listens=7,
+        ),
+        most_used_tag=DashboardStatEntry(name="indie", count=2),
+        longest_track=TrackDashboardEntry(
+            title="Long Song",
+            artists=["Artist 2"],
+            monthly_listens=3,
+            duration_seconds=240,
+            duration_text="4:00",
+        ),
+        top_tags=[DashboardStatEntry(name="indie", count=2)],
+        top_artists=[DashboardStatEntry(name="Artist 1", count=1, monthly_listens=7)],
+    )
+
+    monkeypatch.setattr(service.exporter, "dashboard_data", lambda: dashboard)
+    monkeypatch.setattr(
+        service.client,
+        "fetch_liked_tracks",
+        lambda *, reference_time: (_ for _ in ()).throw(AssertionError("Yandex client must not be used")),
+    )
+
+    result = service.dashboard_data()
+
+    assert result == dashboard
+
+
+def test_refresh_dashboard_delegates_to_exporter_without_api(monkeypatch) -> None:
+    service = SyncService(Settings.model_construct(yandex_music_token="token"))
+    refreshed = DashboardData(
+        liked_tracks_count=0,
+        removed_tracks_count=0,
+        total_tracks_count=0,
+        total_duration_seconds=0,
+        total_duration_text="0:00",
+        monthly_listens_known_count=0,
+        monthly_listens_coverage_percent=0.0,
+        average_monthly_listens=None,
+        median_monthly_listens=None,
+        most_listened_track=None,
+        most_listened_artist=None,
+        most_used_tag=None,
+        longest_track=None,
+        top_tags=[],
+        top_artists=[],
+    )
+
+    monkeypatch.setattr(service.exporter, "refresh_dashboard", lambda: refreshed)
+    monkeypatch.setattr(
+        service.client,
+        "fetch_liked_tracks",
+        lambda *, reference_time: (_ for _ in ()).throw(AssertionError("Yandex client must not be used")),
+    )
+
+    result = service.refresh_dashboard()
+
+    assert result == refreshed

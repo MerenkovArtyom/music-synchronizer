@@ -1,4 +1,4 @@
-export type BackendCommand = "show-config" | "sync" | "list" | "top-listen";
+export type BackendCommand = "show-config" | "sync" | "list" | "top-listen" | "dashboard";
 export type FilterKind = "tag" | "artist";
 export type TopListenMode = "most" | "least";
 
@@ -45,6 +45,48 @@ export interface MonthlyTopData {
   }>;
 }
 
+export interface DashboardData {
+  path: string;
+  summary: {
+    likedTracks: number;
+    removedTracks: number;
+    totalTracks: number;
+    totalDuration: string;
+    monthlyListensKnown: number;
+    monthlyListensCoveragePercent: number;
+    averageMonthlyListens: number | null;
+    medianMonthlyListens: number | null;
+    mostListenedTrack: {
+      title: string;
+      artists: string[];
+      monthlyListens: number;
+    } | null;
+    mostListenedArtist: {
+      name: string;
+      monthlyListens: number;
+      tracks: number;
+    } | null;
+    mostUsedTag: {
+      name: string;
+      tracks: number;
+    } | null;
+    longestTrack: {
+      title: string;
+      artists: string[];
+      duration: string;
+    } | null;
+  };
+  topTags: Array<{
+    name: string;
+    tracks: number;
+  }>;
+  topArtists: Array<{
+    name: string;
+    monthlyListens: number;
+    tracks: number;
+  }>;
+}
+
 export interface BackendErrorPayload {
   code: string;
   message: string;
@@ -81,4 +123,5 @@ export interface RendererApi {
   runSync: () => Promise<BackendEnvelope<SyncData>>;
   listTracks: (request: ListTracksRequest) => Promise<BackendEnvelope<ListData>>;
   getTopListen: (request: TopListenRequest) => Promise<BackendEnvelope<MonthlyTopData>>;
+  getDashboard: () => Promise<BackendEnvelope<DashboardData>>;
 }

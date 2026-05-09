@@ -16,6 +16,9 @@ const api: MusicSyncBridge = {
   getTopListen: async (request: TopListenRequest) => {
     return await ipcRenderer.invoke("music-sync:top-listen", request);
   },
+  getDashboard: async () => {
+    return await ipcRenderer.invoke("music-sync:dashboard");
+  },
 };
 
 contextBridge.exposeInMainWorld("musicSync", api);

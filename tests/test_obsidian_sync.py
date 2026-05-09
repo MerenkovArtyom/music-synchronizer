@@ -502,3 +502,194 @@ def test_top_listen_tracks_preserves_missing_position_for_sort_fallback(tmp_path
     assert len(tracks) == 1
     assert tracks[0].title == "No Position"
     assert tracks[0].source_position is None
+
+
+def test_dashboard_data_uses_local_active_and_removed_notes(tmp_path: Path) -> None:
+    exporter = ObsidianExporter(tmp_path)
+    tracks_dir = tmp_path / "tracks"
+    removed_dir = tracks_dir / "_removed"
+    tracks_dir.mkdir(parents=True, exist_ok=True)
+    removed_dir.mkdir(parents=True, exist_ok=True)
+
+    (tracks_dir / "First.md").write_text(
+        "\n".join(
+            [
+                "---",
+                'track_id: "101"',
+                'title: "First"',
+                'artists: ["Artist A"]',
+                'system_tags: ["indie", "focus"]',
+                'user_tags: ["night"]',
+                "monthly_listens: 7",
+                "duration_seconds: 240",
+                "position: 2",
+                "---",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    (tracks_dir / "Second.md").write_text(
+        "\n".join(
+            [
+                "---",
+                'track_id: "102"',
+                'title: "Second"',
+                'artists: ["Artist A", "Guest"]',
+                'system_tags: ["indie"]',
+                "user_tags: []",
+                "monthly_listens: 3",
+                "duration_seconds: 180",
+                "position: 1",
+                "---",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    (tracks_dir / "Third.md").write_text(
+        "\n".join(
+            [
+                "---",
+                'track_id: "103"',
+                'title: "Third"',
+                'artists: ["Artist B"]',
+                'system_tags: ["ambient"]',
+                'user_tags: ["focus"]',
+                "monthly_listens: null",
+                "duration_seconds: 300",
+                "position: 3",
+                "---",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    (removed_dir / "Archived.md").write_text(
+        "\n".join(
+            [
+                "---",
+                'track_id: "999"',
+                'title: "Archived"',
+                'artists: ["Artist Z"]',
+                'system_tags: ["indie"]',
+                "user_tags: []",
+                "monthly_listens: 99",
+                "duration_seconds: 400",
+                "position: 9",
+                "---",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    dashboard = exporter.dashboard_data()
+
+    assert dashboard.liked_tracks_count == 3
+    assert dashboard.removed_tracks_count == 1
+    assert dashboard.total_tracks_count == 4
+    assert dashboard.total_duration_seconds == 720
+    assert dashboard.total_duration_text == "12:00"
+    assert dashboard.monthly_listens_known_count == 2
+    assert dashboard.monthly_listens_coverage_percent == 66.67
+    assert dashboard.average_monthly_listens == 5.0
+    assert dashboard.median_monthly_listens == 5.0
+    assert dashboard.most_listened_track is not None
+    assert dashboard.most_listened_track.title == "First"
+    assert dashboard.most_listened_artist is not None
+    assert dashboard.most_listened_artist.name == "Artist A"
+    assert dashboard.most_listened_artist.monthly_listens == 10
+    assert dashboard.most_used_tag is not None
+    assert dashboard.most_used_tag.name == "indie"
+    assert dashboard.most_used_tag.count == 2
+    assert dashboard.longest_track is not None
+    assert dashboard.longest_track.title == "Third"
+    assert [(entry.name, entry.count) for entry in dashboard.top_tags] == [
+        ("indie", 2),
+        ("focus", 2),
+        ("ambient", 1),
+        ("night", 1),
+    ]
+    assert [(entry.name, entry.count) for entry in dashboard.top_artists] == [
+        ("Artist A", 2),
+        ("Artist B", 1),
+        ("Guest", 1),
+    ]
+
+
+def test_dashboard_file_is_written_in_vault_root(tmp_path: Path) -> None:
+    exporter = ObsidianExporter(tmp_path)
+    synced_at = datetime(2026, 4, 24, 12, 0, tzinfo=timezone.utc)
+
+    exporter.sync(
+        [
+            _track("101", 1, "First", monthly_listens=7),
+            TrackInfo(
+                track_id="102",
+                title="Second",
+                artists=["Other Artist"],
+                album="Album",
+                tags=["ambient"],
+                year=2024,
+                cover_url="",
+                duration_seconds=300,
+                source_position=2,
+                yandex_url="https://music.yandex.ru/track/102",
+                monthly_listens=3,
+            ),
+        ],
+        synced_at=synced_at,
+    )
+
+    dashboard_path = tmp_path / "dashboard.md"
+    dashboard_content = dashboard_path.read_text(encoding="utf-8")
+
+    assert dashboard_path.exists()
+    assert "# Music Dashboard" in dashboard_content
+    assert "- Liked tracks: 2" in dashboard_content
+    assert "- Removed tracks: 0" in dashboard_content
+    assert "- Total tracks known: 2" in dashboard_content
+    assert "- Most listened track: First - Artist (7 listens)" in dashboard_content
+    assert "- Most listened artist: Artist (7 listens across 1 track)" in dashboard_content
+    assert "- Most used tag: indie (1 track)" in dashboard_content
+    assert "- Total duration: 8:00" in dashboard_content
+    assert "- Monthly listens coverage: 2/2 (100.00%)" in dashboard_content
+    assert "## Top Tags" in dashboard_content
+    assert "1. indie (1 track)" in dashboard_content
+    assert "2. ambient (1 track)" in dashboard_content
+    assert "## Top Artists" in dashboard_content
+    assert "1. Artist (1 track)" in dashboard_content
+    assert "## Longest Track" in dashboard_content
+    assert "Second - Other Artist (5:00)" in dashboard_content
+
+
+def test_dashboard_refresh_writes_file_without_sync_input(tmp_path: Path) -> None:
+    exporter = ObsidianExporter(tmp_path)
+    tracks_dir = tmp_path / "tracks"
+    tracks_dir.mkdir(parents=True, exist_ok=True)
+    (tracks_dir / "First.md").write_text(
+        "\n".join(
+            [
+                "---",
+                'track_id: "101"',
+                'title: "First"',
+                'artists: ["Artist"]',
+                'system_tags: ["indie"]',
+                "user_tags: []",
+                "monthly_listens: 7",
+                "duration_seconds: 180",
+                "position: 1",
+                "---",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    dashboard = exporter.refresh_dashboard()
+    dashboard_content = (tmp_path / "dashboard.md").read_text(encoding="utf-8")
+
+    assert dashboard.liked_tracks_count == 1
+    assert "# Music Dashboard" in dashboard_content
+    assert "- Liked tracks: 1" in dashboard_content

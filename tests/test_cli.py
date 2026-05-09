@@ -4,18 +4,127 @@ import pytest
 from typer.testing import CliRunner
 
 from music_synchronizer.cli import app
-from music_synchronizer.models import MonthlyTopEntry
+from music_synchronizer.models import DashboardData, DashboardStatEntry, MonthlyTopEntry, TrackDashboardEntry
 
 
 def test_help_shows_sync_placeholder() -> None:
     result = CliRunner().invoke(app, ["--help"])
 
     assert result.exit_code == 0
+    assert "dashboard" in result.output
     assert "list" in result.output
     assert "monthly-top" not in result.output
     assert "sync" in result.output
     assert "show-config" in result.output
     assert "top-listen" in result.output
+
+
+def _dashboard_data() -> DashboardData:
+    return DashboardData(
+        liked_tracks_count=3,
+        removed_tracks_count=1,
+        total_tracks_count=4,
+        total_duration_seconds=720,
+        total_duration_text="12:00",
+        monthly_listens_known_count=2,
+        monthly_listens_coverage_percent=66.67,
+        average_monthly_listens=5.0,
+        median_monthly_listens=5.0,
+        most_listened_track=TrackDashboardEntry(
+            title="First",
+            artists=["Artist A"],
+            monthly_listens=7,
+            duration_seconds=240,
+            duration_text="4:00",
+        ),
+        most_listened_artist=DashboardStatEntry(
+            name="Artist A",
+            count=2,
+            monthly_listens=10,
+        ),
+        most_used_tag=DashboardStatEntry(name="indie", count=2),
+        longest_track=TrackDashboardEntry(
+            title="Third",
+            artists=["Artist B"],
+            monthly_listens=0,
+            duration_seconds=300,
+            duration_text="5:00",
+        ),
+        top_tags=[
+            DashboardStatEntry(name="indie", count=2),
+            DashboardStatEntry(name="focus", count=2),
+        ],
+        top_artists=[
+            DashboardStatEntry(name="Artist A", count=2, monthly_listens=10),
+            DashboardStatEntry(name="Artist B", count=1, monthly_listens=0),
+        ],
+    )
+
+
+def test_dashboard_command_prints_summary(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setenv("YANDEX_MUSIC_TOKEN", "token")
+    monkeypatch.setenv("OBSIDIAN_VAULT_PATH", str(tmp_path))
+    dashboard = _dashboard_data()
+
+    class FakeSyncService:
+        def __init__(self, settings: object) -> None:
+            self.settings = settings
+
+        def refresh_dashboard(self) -> DashboardData:
+            return dashboard
+
+    monkeypatch.setattr("music_synchronizer.cli.SyncService", FakeSyncService)
+
+    result = CliRunner().invoke(app, ["dashboard"])
+
+    assert result.exit_code == 0
+    assert result.output.strip().splitlines() == [
+        f"Dashboard updated: {tmp_path / 'dashboard.md'}",
+        "liked_tracks=3",
+        "removed_tracks=1",
+        "total_tracks=4",
+        "total_duration=12:00",
+        "monthly_listens_known=2",
+        "monthly_listens_coverage_percent=66.67",
+        "average_monthly_listens=5.00",
+        "median_monthly_listens=5.00",
+        "most_listened_track=First - Artist A | monthly_listens=7",
+        "most_listened_artist=Artist A | monthly_listens=10 | tracks=2",
+        "most_used_tag=indie | tracks=2",
+        "longest_track=Third - Artist B | duration=5:00",
+        "top_tags:",
+        "1. indie | tracks=2",
+        "2. focus | tracks=2",
+        "top_artists:",
+        "1. Artist A | monthly_listens=10 | tracks=2",
+        "2. Artist B | monthly_listens=0 | tracks=1",
+    ]
+
+
+def test_dashboard_reports_backend_errors(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setenv("YANDEX_MUSIC_TOKEN", "token")
+    monkeypatch.setenv("OBSIDIAN_VAULT_PATH", str(tmp_path))
+
+    class FakeSyncService:
+        def __init__(self, settings: object) -> None:
+            self.settings = settings
+
+        def refresh_dashboard(self) -> DashboardData:
+            raise RuntimeError("dashboard unavailable")
+
+    monkeypatch.setattr("music_synchronizer.cli.SyncService", FakeSyncService)
+
+    result = CliRunner().invoke(app, ["dashboard"])
+
+    assert result.exit_code == 1
+    assert result.stdout == ""
+    assert result.stderr.strip() == "Dashboard failed: dashboard unavailable"
 
 
 def test_top_listen_most_prints_most_played_section(

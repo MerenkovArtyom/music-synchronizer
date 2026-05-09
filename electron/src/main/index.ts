@@ -45,6 +45,10 @@ function registerIpcHandlers(): void {
   ipcMain.handle("music-sync:top-listen", async (_event, request: TopListenRequest) => {
     return await runBackendCommand("top-listen", request, runtimeEnv);
   });
+
+  ipcMain.handle("music-sync:dashboard", async () => {
+    return await runBackendCommand("dashboard", undefined, runtimeEnv);
+  });
 }
 
 app.whenReady().then(() => {

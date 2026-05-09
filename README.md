@@ -26,6 +26,7 @@ uv run music-sync
 - Миграция legacy-поля `tags` в `user_tags`.
 - Подсчёт `monthly_listens` по истории прослушиваний за последние 30 дней.
 - Поиск уже сохранённых активных треков через `list --tag` и `list --artist`.
+- Локальный dashboard-файл `dashboard.md` с агрегатами по активным и архивным заметкам.
 - Разрешение конфликтов имён файлов по схеме:
   - `title`;
   - `title - artist`;
@@ -84,6 +85,7 @@ LOG_LEVEL=INFO
 uv run music-sync --help
 uv run music-sync show-config
 uv run music-sync sync
+uv run music-sync dashboard
 uv run music-sync top-listen --most
 uv run music-sync top-listen --least
 uv run music-sync list --tag "rock"
@@ -95,6 +97,7 @@ uv run music-sync list --artist "Artist Name"
 - `uv run music-sync --help` — показывает список доступных команд.
 - `uv run music-sync show-config` — печатает путь до vault и текущий `LOG_LEVEL`.
 - `uv run music-sync sync` — запускает синхронизацию лайков в Obsidian.
+- `uv run music-sync dashboard` — пересчитывает `dashboard.md` только по локально сохранённым заметкам в vault.
 - `uv run music-sync top-listen --most` — показывает top 10 локально сохранённых треков с самым большим `monthly_listens`.
 - `uv run music-sync top-listen --least` — показывает top 10 локально сохранённых треков с самым маленьким `monthly_listens`.
 - `uv run music-sync list --tag "rock"` — ищет активные сохранённые треки по тегу.
@@ -117,6 +120,13 @@ uv run music-sync list --artist "Artist Name"
 - нужно передать ровно один флаг: `--most` или `--least`;
 - в каждом списке выводится не больше 10 треков.
 
+Особенности команды `dashboard`:
+
+- команда читает только локальные заметки в `tracks/` и `tracks/_removed/`;
+- Yandex Music API не используется;
+- файл `dashboard.md` создаётся в корне vault;
+- в отчёт входят счётчики активных и архивных треков, длительность, покрытие `monthly_listens`, лидеры по тегам и артистам.
+
 ## Как устроена синхронизация
 
 При запуске `sync` проект:
@@ -125,7 +135,8 @@ uv run music-sync list --artist "Artist Name"
 2. пытается посчитать количество прослушиваний за последние 30 дней;
 3. создаёт или обновляет заметки в Obsidian;
 4. переносит исчезнувшие из лайков треки в архив;
-5. сохраняет служебный снапшот в `.music_sync_snapshot.json`.
+5. обновляет локальный `dashboard.md`;
+6. сохраняет служебный снапшот в `.music_sync_snapshot.json`.
 
 Синхронизация ориентируется на `track_id`, а не на имя файла. Это важно: заметка может быть переименована при изменении названия трека или разрешении коллизии, но связь с треком остаётся стабильной.
 
@@ -142,6 +153,10 @@ uv run music-sync list --artist "Artist Name"
 Служебный файл:
 
 - `.music_sync_snapshot.json`
+
+Dashboard:
+
+- `dashboard.md`
 
 Каждая заметка содержит YAML frontmatter и Markdown-тело. Пример:
 

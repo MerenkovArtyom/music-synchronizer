@@ -269,6 +269,15 @@ select {
   line-height: 1.5;
 }
 
+.action-panel {
+  display: grid;
+  gap: 18px;
+}
+
+.status-action {
+  justify-self: start;
+}
+
 .content-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -445,6 +454,18 @@ select {
 
 .empty-state {
   color: var(--color-slate-200);
+}
+
+.dashboard-path {
+  margin: 16px 0 0;
+  color: var(--color-slate-200);
+  font-family: "Geist Mono", "JetBrains Mono", "IBM Plex Mono", monospace;
+  font-size: 13px;
+  word-break: break-word;
+}
+
+.dashboard-grid {
+  margin-top: 24px;
 }
 
 .results {

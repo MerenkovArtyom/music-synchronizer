@@ -1,6 +1,7 @@
 import type {
   BackendEnvelope,
   ConfigData,
+  DashboardData,
   FilterKind,
   ListData,
   ListTracksRequest,
@@ -13,10 +14,16 @@ const statusBadge = document.querySelector<HTMLSpanElement>("#status-badge");
 const statusMessage = document.querySelector<HTMLParagraphElement>("#status-message");
 const refreshConfigButton = document.querySelector<HTMLButtonElement>("#refresh-config");
 const runSyncButton = document.querySelector<HTMLButtonElement>("#run-sync");
+const dashboardButton = document.querySelector<HTMLButtonElement>("#dashboard-load");
 const listSubmitButton = document.querySelector<HTMLButtonElement>("#list-submit");
 const monthlyTopButton = document.querySelector<HTMLButtonElement>("#monthly-top-load");
 const configDetails = document.querySelector<HTMLElement>("#config-details");
 const syncSummary = document.querySelector<HTMLElement>("#sync-summary");
+const dashboardEmpty = document.querySelector<HTMLElement>("#dashboard-empty");
+const dashboardPath = document.querySelector<HTMLElement>("#dashboard-path");
+const dashboardSummary = document.querySelector<HTMLElement>("#dashboard-summary");
+const dashboardTopTags = document.querySelector<HTMLUListElement>("#dashboard-top-tags");
+const dashboardTopArtists = document.querySelector<HTMLUListElement>("#dashboard-top-artists");
 const listForm = document.querySelector<HTMLFormElement>("#list-form");
 const filterKind = document.querySelector<HTMLSelectElement>("#filter-kind");
 const filterValue = document.querySelector<HTMLInputElement>("#filter-value");
@@ -46,6 +53,9 @@ function setBusy(isBusy: boolean): void {
   }
   if (runSyncButton) {
     runSyncButton.disabled = isBusy;
+  }
+  if (dashboardButton) {
+    dashboardButton.disabled = isBusy;
   }
   if (listSubmitButton) {
     listSubmitButton.disabled = isBusy;
@@ -150,6 +160,93 @@ function renderMonthlyTop(data: MonthlyTopData): void {
   monthlyTopEmpty.textContent = `Loaded ${data.mostPlayed.length} most-played and ${data.leastPlayed.length} least-played tracks.`;
 }
 
+function renderDashboardStatList(
+  target: HTMLUListElement | null,
+  items: string[],
+): void {
+  if (!target) {
+    return;
+  }
+
+  target.innerHTML = "";
+  for (const itemText of items) {
+    const item = document.createElement("li");
+    item.innerHTML = `<span class="track-title">${escapeHtml(itemText)}</span>`;
+    target.appendChild(item);
+  }
+}
+
+function renderDashboard(data: DashboardData): void {
+  if (dashboardPath) {
+    dashboardPath.textContent = data.path;
+  }
+
+  if (dashboardSummary) {
+    const { summary } = data;
+    dashboardSummary.innerHTML = [
+      ["Liked tracks", summary.likedTracks],
+      ["Removed tracks", summary.removedTracks],
+      ["Total tracks", summary.totalTracks],
+      ["Total duration", summary.totalDuration],
+      ["Known monthly listens", summary.monthlyListensKnown],
+      ["Coverage", `${summary.monthlyListensCoveragePercent.toFixed(2)}%`],
+      [
+        "Average monthly listens",
+        summary.averageMonthlyListens === null ? "-" : summary.averageMonthlyListens.toFixed(2),
+      ],
+      [
+        "Median monthly listens",
+        summary.medianMonthlyListens === null ? "-" : summary.medianMonthlyListens.toFixed(2),
+      ],
+      [
+        "Most listened track",
+        summary.mostListenedTrack
+          ? `${summary.mostListenedTrack.title} - ${summary.mostListenedTrack.artists.join(", ") || "Unknown Artist"} (${summary.mostListenedTrack.monthlyListens})`
+          : "-",
+      ],
+      [
+        "Most listened artist",
+        summary.mostListenedArtist
+          ? `${summary.mostListenedArtist.name} (${summary.mostListenedArtist.monthlyListens} listens, ${summary.mostListenedArtist.tracks} track${summary.mostListenedArtist.tracks === 1 ? "" : "s"})`
+          : "-",
+      ],
+      [
+        "Most used tag",
+        summary.mostUsedTag
+          ? `${summary.mostUsedTag.name} (${summary.mostUsedTag.tracks} track${summary.mostUsedTag.tracks === 1 ? "" : "s"})`
+          : "-",
+      ],
+      [
+        "Longest track",
+        summary.longestTrack
+          ? `${summary.longestTrack.title} - ${summary.longestTrack.artists.join(", ") || "Unknown Artist"} (${summary.longestTrack.duration})`
+          : "-",
+      ],
+    ]
+      .map(
+        ([label, value]) =>
+          `<div><dt>${escapeHtml(String(label))}</dt><dd>${escapeHtml(String(value))}</dd></div>`,
+      )
+      .join("");
+  }
+
+  renderDashboardStatList(
+    dashboardTopTags,
+    data.topTags.map((entry) => `${entry.name} (${entry.tracks} track${entry.tracks === 1 ? "" : "s"})`),
+  );
+  renderDashboardStatList(
+    dashboardTopArtists,
+    data.topArtists.map(
+      (entry) =>
+        `${entry.name} (${entry.monthlyListens} listens, ${entry.tracks} track${entry.tracks === 1 ? "" : "s"})`,
+    ),
+  );
+
+  if (dashboardEmpty) {
+    dashboardEmpty.textContent = `Loaded dashboard for ${data.summary.totalTracks} known track(s).`;
+  }
+}
+
 function errorSummary<T>(result: BackendEnvelope<T>): string {
   if (result.ok) {
     return "Unexpected success result.";
@@ -192,6 +289,36 @@ async function runSync(): Promise<void> {
     updateStatus("success", "Synced", `Added ${result.data.summary.added} tracks.`);
   } else {
     updateStatus("error", "Sync Error", errorSummary(result));
+  }
+
+  setBusy(false);
+}
+
+async function loadDashboard(): Promise<void> {
+  setBusy(true);
+  updateStatus("busy", "Dashboard", "Loading the local dashboard from the Python backend.");
+
+  const result = await window.musicSync.getDashboard();
+  if (result.ok) {
+    renderDashboard(result.data);
+    updateStatus("success", "Dashboard", "Dashboard loaded from local vault data.");
+  } else {
+    if (dashboardEmpty) {
+      dashboardEmpty.textContent = "Dashboard request failed.";
+    }
+    if (dashboardPath) {
+      dashboardPath.textContent = "";
+    }
+    if (dashboardSummary) {
+      dashboardSummary.innerHTML = "";
+    }
+    if (dashboardTopTags) {
+      dashboardTopTags.innerHTML = "";
+    }
+    if (dashboardTopArtists) {
+      dashboardTopArtists.innerHTML = "";
+    }
+    updateStatus("error", "Dashboard Error", errorSummary(result));
   }
 
   setBusy(false);
@@ -272,6 +399,10 @@ refreshConfigButton?.addEventListener("click", () => {
 
 runSyncButton?.addEventListener("click", () => {
   void runSync();
+});
+
+dashboardButton?.addEventListener("click", () => {
+  void loadDashboard();
 });
 
 listForm?.addEventListener("submit", (event) => {

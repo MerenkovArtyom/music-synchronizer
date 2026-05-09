@@ -4,6 +4,7 @@ import test from "node:test";
 import type {
   BackendEnvelope,
   ConfigData,
+  DashboardData,
   ListData,
   MonthlyTopData,
   TopListenRequest,
@@ -57,6 +58,17 @@ test("buildBackendInvocation supports the top-listen command with the most flag"
 
   assert.equal(invocation.command, "python");
   assert.deepEqual(invocation.args, ["-m", "music_synchronizer.cli", "top-listen", "--most"]);
+  assert.equal(invocation.cwd, "/tmp/music-sync");
+});
+
+test("buildBackendInvocation supports the dashboard command", () => {
+  const invocation = buildBackendInvocation("dashboard", [], {
+    MUSIC_SYNC_BACKEND_COMMAND: '["python", "-m", "music_synchronizer.cli"]',
+    MUSIC_SYNC_REPO_ROOT: "/tmp/music-sync",
+  });
+
+  assert.equal(invocation.command, "python");
+  assert.deepEqual(invocation.args, ["-m", "music_synchronizer.cli", "dashboard"]);
   assert.equal(invocation.cwd, "/tmp/music-sync");
 });
 
@@ -191,6 +203,81 @@ test("normalizeBackendEnvelope parses top-listen least output", () => {
   });
 });
 
+test("normalizeBackendEnvelope parses dashboard output", () => {
+  const envelope = normalizeBackendEnvelope("dashboard", {
+    stdout: [
+      "Dashboard updated: /tmp/vault/dashboard.md",
+      "liked_tracks=3",
+      "removed_tracks=1",
+      "total_tracks=4",
+      "total_duration=12:00",
+      "monthly_listens_known=2",
+      "monthly_listens_coverage_percent=66.67",
+      "average_monthly_listens=5.00",
+      "median_monthly_listens=5.00",
+      "most_listened_track=First - Artist A | monthly_listens=7",
+      "most_listened_artist=Artist A | monthly_listens=10 | tracks=2",
+      "most_used_tag=indie | tracks=2",
+      "longest_track=Third - Artist B | duration=5:00",
+      "top_tags:",
+      "1. indie | tracks=2",
+      "2. focus | tracks=2",
+      "top_artists:",
+      "1. Artist A | monthly_listens=10 | tracks=2",
+      "2. Artist B | monthly_listens=0 | tracks=1",
+      "",
+    ].join("\n"),
+    stderr: "",
+    exitCode: 0,
+  }) as BackendEnvelope<DashboardData>;
+
+  assert.equal(envelope.ok, true);
+  if (!envelope.ok) {
+    throw new Error("expected success envelope");
+  }
+
+  assert.deepEqual(envelope.data, {
+    path: "/tmp/vault/dashboard.md",
+    summary: {
+      likedTracks: 3,
+      removedTracks: 1,
+      totalTracks: 4,
+      totalDuration: "12:00",
+      monthlyListensKnown: 2,
+      monthlyListensCoveragePercent: 66.67,
+      averageMonthlyListens: 5,
+      medianMonthlyListens: 5,
+      mostListenedTrack: {
+        title: "First",
+        artists: ["Artist A"],
+        monthlyListens: 7,
+      },
+      mostListenedArtist: {
+        name: "Artist A",
+        monthlyListens: 10,
+        tracks: 2,
+      },
+      mostUsedTag: {
+        name: "indie",
+        tracks: 2,
+      },
+      longestTrack: {
+        title: "Third",
+        artists: ["Artist B"],
+        duration: "5:00",
+      },
+    },
+    topTags: [
+      { name: "indie", tracks: 2 },
+      { name: "focus", tracks: 2 },
+    ],
+    topArtists: [
+      { name: "Artist A", monthlyListens: 10, tracks: 2 },
+      { name: "Artist B", monthlyListens: 0, tracks: 1 },
+    ],
+  });
+});
+
 test("normalizeBackendEnvelope rejects invalid top-listen output", () => {
   const envelope = normalizeBackendEnvelope("top-listen", {
     stdout: "Most Played:\nnot-a-track-line\n",
@@ -207,6 +294,22 @@ test("normalizeBackendEnvelope rejects invalid top-listen output", () => {
 
   assert.equal(envelope.error.code, "BACKEND_INVALID_OUTPUT");
   assert.match(envelope.error.message, /top-listen/i);
+});
+
+test("normalizeBackendEnvelope rejects invalid dashboard output", () => {
+  const envelope = normalizeBackendEnvelope("dashboard", {
+    stdout: "Dashboard updated: /tmp/vault/dashboard.md\nliked_tracks=nope\n",
+    stderr: "",
+    exitCode: 0,
+  });
+
+  assert.equal(envelope.ok, false);
+  if (envelope.ok) {
+    throw new Error("expected error envelope");
+  }
+
+  assert.equal(envelope.error.code, "BACKEND_INVALID_OUTPUT");
+  assert.match(envelope.error.message, /dashboard/i);
 });
 
 test("normalizeBackendEnvelope returns a structured error for backend failures", () => {

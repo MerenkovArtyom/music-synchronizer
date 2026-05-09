@@ -22,6 +22,7 @@
         <nav class="nav-links" aria-label="Sections">
           <a href="#status-title">Status</a>
           <a href="#config-title">Config</a>
+          <a href="#dashboard-title">Dashboard</a>
           <a href="#list-title">Library</a>
           <a href="#monthly-top-title">Monthly Top</a>
         </nav>
@@ -65,6 +66,21 @@
             <p id="status-message" class="status-message">
               Load configuration, run sync, inspect active notes, or view monthly listening leaders.
             </p>
+          </div>
+
+          <div class="hero-panel action-panel" aria-labelledby="dashboard-action-title">
+            <div class="panel-head">
+              <div>
+                <p class="micro-label">Snapshot</p>
+                <h2 id="dashboard-action-title">Vault Dashboard</h2>
+              </div>
+            </div>
+            <p class="status-message">
+              Pull the local dashboard report into the window without touching Yandex Music.
+            </p>
+            <button id="dashboard-load" class="button-muted status-action" type="button">
+              Load Dashboard
+            </button>
           </div>
         </div>
       </section>
@@ -131,6 +147,32 @@
               <dd>-</dd>
             </div>
           </dl>
+        </section>
+
+        <section class="surface-card surface-card-wide" aria-labelledby="dashboard-title">
+          <div class="panel-head">
+            <div>
+              <p class="micro-label">Snapshot</p>
+              <h2 id="dashboard-title">Vault Dashboard</h2>
+            </div>
+            <span class="dark-pill">local notes only</span>
+          </div>
+          <p class="panel-copy">
+            Load the computed dashboard from the Python backend without touching Yandex Music.
+          </p>
+          <div id="dashboard-empty" class="empty-state">No dashboard loaded yet.</div>
+          <p id="dashboard-path" class="dashboard-path"></p>
+          <dl id="dashboard-summary" class="metric-list muted"></dl>
+          <div class="top-grid dashboard-grid">
+            <section class="top-column" aria-labelledby="dashboard-top-tags-title">
+              <h3 id="dashboard-top-tags-title">Top Tags</h3>
+              <ul id="dashboard-top-tags" class="results"></ul>
+            </section>
+            <section class="top-column" aria-labelledby="dashboard-top-artists-title">
+              <h3 id="dashboard-top-artists-title">Top Artists</h3>
+              <ul id="dashboard-top-artists" class="results"></ul>
+            </section>
+          </div>
         </section>
 
         <section class="surface-card surface-card-wide" aria-labelledby="list-title">

@@ -6,8 +6,16 @@ from datetime import datetime
 import json
 from pathlib import Path
 import re
+from statistics import mean, median
 
-from music_synchronizer.models import SavedTrackInfo, SyncSummary, TrackInfo
+from music_synchronizer.models import (
+    DashboardData,
+    DashboardStatEntry,
+    SavedTrackInfo,
+    SyncSummary,
+    TrackDashboardEntry,
+    TrackInfo,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -30,6 +38,7 @@ class ObsidianExporter:
         self.tracks_dir = vault_path / "tracks"
         self.removed_dir = self.tracks_dir / "_removed"
         self.snapshot_path = vault_path / ".music_sync_snapshot.json"
+        self.dashboard_path = vault_path / "dashboard.md"
 
     def sync(self, tracks: list[TrackInfo], synced_at: datetime) -> SyncSummary:
         self.vault_path.mkdir(parents=True, exist_ok=True)
@@ -103,6 +112,7 @@ class ObsidianExporter:
         staging_dir.rmdir()
 
         self._save_snapshot(current_snapshots)
+        self.refresh_dashboard()
         return SyncSummary(
             added=len(added_ids),
             unchanged=len(unchanged_ids),
@@ -148,16 +158,47 @@ class ObsidianExporter:
         return matching_tracks
 
     def top_listen_tracks(self) -> list[SavedTrackInfo]:
-        saved_tracks: list[SavedTrackInfo] = []
-        if not self.tracks_dir.exists():
-            return saved_tracks
+        return self._read_saved_tracks(self.tracks_dir)
 
-        for path in sorted(self.tracks_dir.glob("*.md")):
-            track = self._read_saved_track(path)
-            if track is not None:
-                saved_tracks.append(track)
+    def dashboard_data(self) -> DashboardData:
+        active_tracks = self._read_saved_tracks(self.tracks_dir)
+        removed_tracks = self._read_saved_tracks(self.removed_dir)
+        monthly_listens_values = [
+            track.monthly_listens for track in active_tracks if track.monthly_listens is not None
+        ]
+        total_duration_seconds = sum(track.duration_seconds for track in active_tracks)
+        monthly_coverage = (
+            round((len(monthly_listens_values) / len(active_tracks)) * 100, 2) if active_tracks else 0.0
+        )
+        top_tags = self._build_top_tag_entries(active_tracks)
+        top_artists = self._build_top_artist_entries(active_tracks)
+        most_listened_artist = self._most_listened_artist(active_tracks)
+        most_listened_track = self._most_listened_track(active_tracks)
+        longest_track = self._longest_track(active_tracks)
 
-        return saved_tracks
+        return DashboardData(
+            liked_tracks_count=len(active_tracks),
+            removed_tracks_count=len(removed_tracks),
+            total_tracks_count=len(active_tracks) + len(removed_tracks),
+            total_duration_seconds=total_duration_seconds,
+            total_duration_text=self._format_duration(total_duration_seconds),
+            monthly_listens_known_count=len(monthly_listens_values),
+            monthly_listens_coverage_percent=monthly_coverage,
+            average_monthly_listens=mean(monthly_listens_values) if monthly_listens_values else None,
+            median_monthly_listens=median(monthly_listens_values) if monthly_listens_values else None,
+            most_listened_track=most_listened_track,
+            most_listened_artist=most_listened_artist,
+            most_used_tag=top_tags[0] if top_tags else None,
+            longest_track=longest_track,
+            top_tags=top_tags,
+            top_artists=top_artists,
+        )
+
+    def refresh_dashboard(self) -> DashboardData:
+        self.vault_path.mkdir(parents=True, exist_ok=True)
+        dashboard = self.dashboard_data()
+        self.dashboard_path.write_text(self._render_dashboard(dashboard), encoding="utf-8")
+        return dashboard
 
     def _render_track(self, track: TrackInfo, synced_at: datetime, user_tags: list[str]) -> str:
         artists = ", ".join(track.artists) if track.artists else "Unknown Artist"
@@ -220,6 +261,18 @@ class ObsidianExporter:
         playlist_path = self.vault_path / "playlist.md"
         if playlist_path.exists():
             playlist_path.unlink()
+
+    def _read_saved_tracks(self, directory: Path) -> list[SavedTrackInfo]:
+        saved_tracks: list[SavedTrackInfo] = []
+        if not directory.exists():
+            return saved_tracks
+
+        for path in sorted(directory.glob("*.md")):
+            track = self._read_saved_track(path)
+            if track is not None:
+                saved_tracks.append(track)
+
+        return saved_tracks
 
     def _scan_managed_files(self) -> dict[str, Path]:
         managed: dict[str, Path] = {}
@@ -291,19 +344,29 @@ class ObsidianExporter:
         user_tags = self._read_optional_frontmatter_list(content, "user_tags")
         system_tags = self._read_optional_frontmatter_list(content, "system_tags")
         monthly_listens = self._read_optional_frontmatter_int(content, "monthly_listens")
+        duration_seconds = self._read_optional_frontmatter_int(content, "duration_seconds") or 0
         source_position = self._read_optional_frontmatter_int(content, "position")
+        track_id = self._read_frontmatter_value(content, "track_id")
 
         if title is None:
             return None
 
-        tags = self._normalize_tags(user_tags or [], system_tags or [])
+        normalized_system_tags = self._normalize_tags(system_tags or [])
+        normalized_user_tags = self._normalize_tags(user_tags or [])
+        tags = self._normalize_tags(normalized_system_tags, normalized_user_tags)
         if user_tags is None and system_tags is None:
             tags = self._normalize_tags(self._read_frontmatter_list(content, "tags"))
+            normalized_system_tags = []
+            normalized_user_tags = list(tags)
 
         return SavedTrackInfo(
+            track_id=track_id,
             title=title,
             artists=artists,
             tags=tags,
+            system_tags=normalized_system_tags,
+            user_tags=normalized_user_tags,
+            duration_seconds=duration_seconds,
             monthly_listens=monthly_listens,
             source_position=source_position,
         )
@@ -494,3 +557,238 @@ class ObsidianExporter:
         if re.search(r"^tags:\s*", content, re.MULTILINE):
             return True
         return re.search(r"^user_tags:\s*$", content, re.MULTILINE) is not None
+
+    def _build_top_tag_entries(self, tracks: list[SavedTrackInfo]) -> list[DashboardStatEntry]:
+        counts: dict[str, int] = {}
+        names: dict[str, str] = {}
+        order: dict[str, int] = {}
+        source_priority: dict[str, int] = {}
+        next_index = 0
+        for track in tracks:
+            ordered_tags = self._normalize_tags(track.system_tags, track.user_tags)
+            for tag in ordered_tags:
+                key = tag.casefold()
+                counts[key] = counts.get(key, 0) + 1
+                names.setdefault(key, tag)
+                if key not in order:
+                    order[key] = next_index
+                    next_index += 1
+                    source_priority[key] = 0 if tag in track.system_tags else 1
+                elif key in track.system_tags:
+                    source_priority[key] = 0
+
+        ordered_keys = sorted(counts, key=lambda key: (-counts[key], source_priority[key], order[key]))
+        return [
+            DashboardStatEntry(name=names[key], count=counts[key])
+            for key in ordered_keys[:5]
+        ]
+
+    def _build_top_artist_entries(
+        self,
+        tracks: list[SavedTrackInfo],
+    ) -> list[DashboardStatEntry]:
+        counts: dict[str, int] = {}
+        listens: dict[str, int] = {}
+        names: dict[str, str] = {}
+        order: dict[str, int] = {}
+        primary_priority: dict[str, int] = {}
+        next_index = 0
+
+        for track in tracks:
+            for artist_index, artist in enumerate(track.artists):
+                key = artist.casefold()
+                counts[key] = counts.get(key, 0) + 1
+                listens[key] = listens.get(key, 0) + (track.monthly_listens or 0)
+                names.setdefault(key, artist)
+                if key not in order:
+                    order[key] = next_index
+                    next_index += 1
+                    primary_priority[key] = 0 if artist_index == 0 else 1
+                elif artist_index == 0:
+                    primary_priority[key] = 0
+
+        ordered_keys = sorted(
+            counts,
+            key=lambda key: (
+                -counts[key],
+                primary_priority[key],
+                order[key],
+            ),
+        )
+        return [
+            DashboardStatEntry(
+                name=names[key],
+                count=counts[key],
+                monthly_listens=listens[key],
+            )
+            for key in ordered_keys[:5]
+        ]
+
+    def _most_listened_artist(self, tracks: list[SavedTrackInfo]) -> DashboardStatEntry | None:
+        counts: dict[str, int] = {}
+        listens: dict[str, int] = {}
+        names: dict[str, str] = {}
+        order: dict[str, int] = {}
+        primary_priority: dict[str, int] = {}
+        next_index = 0
+
+        for track in tracks:
+            for artist_index, artist in enumerate(track.artists):
+                key = artist.casefold()
+                counts[key] = counts.get(key, 0) + 1
+                listens[key] = listens.get(key, 0) + (track.monthly_listens or 0)
+                names.setdefault(key, artist)
+                if key not in order:
+                    order[key] = next_index
+                    next_index += 1
+                    primary_priority[key] = 0 if artist_index == 0 else 1
+                elif artist_index == 0:
+                    primary_priority[key] = 0
+
+        if not counts:
+            return None
+
+        best_key = min(
+            counts,
+            key=lambda key: (
+                -listens[key],
+                -counts[key],
+                primary_priority[key],
+                order[key],
+            ),
+        )
+        return DashboardStatEntry(
+            name=names[best_key],
+            count=counts[best_key],
+            monthly_listens=listens[best_key],
+        )
+
+    def _most_listened_track(self, tracks: list[SavedTrackInfo]) -> TrackDashboardEntry | None:
+        ranked_tracks = [track for track in tracks if track.monthly_listens is not None]
+        if not ranked_tracks:
+            return None
+
+        track = min(
+            ranked_tracks,
+            key=lambda item: (
+                -(item.monthly_listens or 0),
+                item.source_position if item.source_position is not None else float("inf"),
+                item.title.casefold(),
+                ",".join(artist.casefold() for artist in item.artists),
+            ),
+        )
+        return self._to_track_dashboard_entry(track)
+
+    def _longest_track(self, tracks: list[SavedTrackInfo]) -> TrackDashboardEntry | None:
+        if not tracks:
+            return None
+
+        track = min(
+            tracks,
+            key=lambda item: (
+                -item.duration_seconds,
+                item.source_position if item.source_position is not None else float("inf"),
+                item.title.casefold(),
+            ),
+        )
+        return self._to_track_dashboard_entry(track)
+
+    def _to_track_dashboard_entry(self, track: SavedTrackInfo) -> TrackDashboardEntry:
+        return TrackDashboardEntry(
+            title=track.title,
+            artists=track.artists,
+            monthly_listens=track.monthly_listens,
+            duration_seconds=track.duration_seconds,
+            duration_text=self._format_duration(track.duration_seconds),
+        )
+
+    def _render_dashboard(self, dashboard: DashboardData) -> str:
+        lines = [
+            "# Music Dashboard",
+            "",
+            "## Overview",
+            f"- Liked tracks: {dashboard.liked_tracks_count}",
+            f"- Removed tracks: {dashboard.removed_tracks_count}",
+            f"- Total tracks known: {dashboard.total_tracks_count}",
+            f"- Most listened track: {self._render_track_summary(dashboard.most_listened_track)}",
+            f"- Most listened artist: {self._render_artist_summary(dashboard.most_listened_artist)}",
+            f"- Most used tag: {self._render_tag_summary(dashboard.most_used_tag)}",
+            f"- Total duration: {dashboard.total_duration_text}",
+            (
+                f"- Average monthly listens: {dashboard.average_monthly_listens:.2f}"
+                if dashboard.average_monthly_listens is not None
+                else "- Average monthly listens: -"
+            ),
+            (
+                f"- Median monthly listens: {dashboard.median_monthly_listens:.2f}"
+                if dashboard.median_monthly_listens is not None
+                else "- Median monthly listens: -"
+            ),
+            (
+                f"- Monthly listens coverage: {dashboard.monthly_listens_known_count}/"
+                f"{dashboard.liked_tracks_count} ({dashboard.monthly_listens_coverage_percent:.2f}%)"
+            ),
+            "",
+            "## Top Tags",
+        ]
+
+        if dashboard.top_tags:
+            lines.extend(
+                [
+                    f"{index}. {entry.name} ({entry.count} track{'' if entry.count == 1 else 's'})"
+                    for index, entry in enumerate(dashboard.top_tags, start=1)
+                ]
+            )
+        else:
+            lines.append("- None")
+
+        lines.extend(["", "## Top Artists"])
+        if dashboard.top_artists:
+            lines.extend(
+                [
+                    f"{index}. {entry.name} ({entry.count} track{'' if entry.count == 1 else 's'})"
+                    for index, entry in enumerate(dashboard.top_artists, start=1)
+                ]
+            )
+        else:
+            lines.append("- None")
+
+        lines.extend(
+            [
+                "",
+                "## Longest Track",
+                self._render_longest_track_summary(dashboard.longest_track),
+                "",
+            ]
+        )
+        return "\n".join(lines)
+
+    def _render_track_summary(self, track: TrackDashboardEntry | None) -> str:
+        if track is None:
+            return "-"
+
+        artists = ", ".join(track.artists) if track.artists else "Unknown Artist"
+        listens = track.monthly_listens if track.monthly_listens is not None else 0
+        return f"{track.title} - {artists} ({listens} listens)"
+
+    def _render_artist_summary(self, artist: DashboardStatEntry | None) -> str:
+        if artist is None:
+            return "-"
+
+        listens = artist.monthly_listens if artist.monthly_listens is not None else 0
+        label = "track" if artist.count == 1 else "tracks"
+        return f"{artist.name} ({listens} listens across {artist.count} {label})"
+
+    def _render_tag_summary(self, tag: DashboardStatEntry | None) -> str:
+        if tag is None:
+            return "-"
+
+        label = "track" if tag.count == 1 else "tracks"
+        return f"{tag.name} ({tag.count} {label})"
+
+    def _render_longest_track_summary(self, track: TrackDashboardEntry | None) -> str:
+        if track is None:
+            return "-"
+
+        artists = ", ".join(track.artists) if track.artists else "Unknown Artist"
+        return f"{track.title} - {artists} ({track.duration_text})"
