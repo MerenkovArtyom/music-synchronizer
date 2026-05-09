@@ -84,6 +84,8 @@ LOG_LEVEL=INFO
 uv run music-sync --help
 uv run music-sync show-config
 uv run music-sync sync
+uv run music-sync top-listen --most
+uv run music-sync top-listen --least
 uv run music-sync list --tag "rock"
 uv run music-sync list --artist "Artist Name"
 ```
@@ -93,6 +95,8 @@ uv run music-sync list --artist "Artist Name"
 - `uv run music-sync --help` — показывает список доступных команд.
 - `uv run music-sync show-config` — печатает путь до vault и текущий `LOG_LEVEL`.
 - `uv run music-sync sync` — запускает синхронизацию лайков в Obsidian.
+- `uv run music-sync top-listen --most` — показывает top 10 локально сохранённых треков с самым большим `monthly_listens`.
+- `uv run music-sync top-listen --least` — показывает top 10 локально сохранённых треков с самым маленьким `monthly_listens`.
 - `uv run music-sync list --tag "rock"` — ищет активные сохранённые треки по тегу.
 - `uv run music-sync list --artist "Artist Name"` — ищет активные сохранённые треки по артисту.
 
@@ -103,6 +107,15 @@ uv run music-sync list --artist "Artist Name"
 - архив `tracks/_removed/` не участвует в выдаче;
 - поиск по тегам учитывает и `system_tags`, и `user_tags`;
 - если значение содержит пробелы, его нужно передавать в кавычках.
+
+Особенности команды `top-listen`:
+
+- команда читает только активные заметки из `tracks/`;
+- архив `tracks/_removed/` не участвует в выдаче;
+- ранжирование идёт по локально сохранённому `monthly_listens`;
+- при одинаковом количестве прослушиваний раньше остаётся трек, который выше в лайках;
+- нужно передать ровно один флаг: `--most` или `--least`;
+- в каждом списке выводится не больше 10 треков.
 
 ## Как устроена синхронизация
 

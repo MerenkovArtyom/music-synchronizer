@@ -401,3 +401,104 @@ def test_export_restores_removed_track_as_added(tmp_path: Path) -> None:
     assert summary.removed == 0
     assert (tmp_path / "tracks" / "Second.md").exists()
     assert not (tmp_path / "tracks" / "_removed" / "Second.md").exists()
+
+
+def test_top_listen_tracks_reads_only_active_notes(tmp_path: Path) -> None:
+    exporter = ObsidianExporter(tmp_path)
+    tracks_dir = tmp_path / "tracks"
+    removed_dir = tracks_dir / "_removed"
+    tracks_dir.mkdir(parents=True, exist_ok=True)
+    removed_dir.mkdir(parents=True, exist_ok=True)
+
+    (tracks_dir / "First.md").write_text(
+        "\n".join(
+            [
+                "---",
+                'track_id: "101"',
+                'title: "First"',
+                'artists: ["Artist A"]',
+                "monthly_listens: 7",
+                "position: 2",
+                "---",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    (tracks_dir / "Second.md").write_text(
+        "\n".join(
+            [
+                "---",
+                'track_id: "102"',
+                'title: "Second"',
+                'artists: ["Artist B"]',
+                "monthly_listens: null",
+                "position: 5",
+                "---",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    (tracks_dir / "Broken.md").write_text(
+        "\n".join(
+            [
+                "---",
+                'artists: ["Artist C"]',
+                "monthly_listens: 3",
+                "position: 1",
+                "---",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    (removed_dir / "Archived.md").write_text(
+        "\n".join(
+            [
+                "---",
+                'track_id: "999"',
+                'title: "Archived"',
+                'artists: ["Archived Artist"]',
+                "monthly_listens: 99",
+                "position: 1",
+                "---",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    tracks = exporter.top_listen_tracks()
+
+    assert [(track.title, track.monthly_listens, track.source_position) for track in tracks] == [
+        ("First", 7, 2),
+        ("Second", None, 5),
+    ]
+
+
+def test_top_listen_tracks_preserves_missing_position_for_sort_fallback(tmp_path: Path) -> None:
+    exporter = ObsidianExporter(tmp_path)
+    tracks_dir = tmp_path / "tracks"
+    tracks_dir.mkdir(parents=True, exist_ok=True)
+
+    (tracks_dir / "NoPosition.md").write_text(
+        "\n".join(
+            [
+                "---",
+                'track_id: "101"',
+                'title: "No Position"',
+                'artists: ["Artist"]',
+                "monthly_listens: 4",
+                "---",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    tracks = exporter.top_listen_tracks()
+
+    assert len(tracks) == 1
+    assert tracks[0].title == "No Position"
+    assert tracks[0].source_position is None

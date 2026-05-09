@@ -283,6 +283,24 @@ select {
   grid-column: 1 / -1;
 }
 
+.top-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+  margin-top: 20px;
+}
+
+.top-column h3 {
+  margin: 0 0 14px;
+  font-size: 16px;
+  letter-spacing: 0.02em;
+}
+
+.track-meta {
+  color: var(--color-slate-200);
+  font-size: 13px;
+}
+
 .badge {
   display: inline-flex;
   align-items: center;
@@ -488,5 +506,9 @@ select {
 
   .list-form {
     flex-direction: column;
+  }
+
+  .top-grid {
+    grid-template-columns: 1fr;
   }
 }

@@ -6,14 +6,17 @@ import type {
   ConfigData,
   ListData,
   ListTracksRequest,
+  MonthlyTopData,
   SyncData,
+  TopListenRequest,
 } from "../shared/contracts.js";
 
-type BackendData = ConfigData | SyncData | ListData;
+type BackendData = ConfigData | SyncData | ListData | MonthlyTopData;
 type CommandDataMap = {
   "show-config": ConfigData;
   sync: SyncData;
   list: ListData;
+  "top-listen": MonthlyTopData;
 };
 
 export interface BackendRuntimeEnv extends NodeJS.ProcessEnv {
@@ -193,6 +196,54 @@ function parseListOutput(request: ListTracksRequest | undefined, stdout: string)
   };
 }
 
+function parseTopListenLine(line: string): MonthlyTopData["mostPlayed"][number] {
+  const match =
+    /^(\d+)\.\s+(.*?)\s+-\s+(.*?)\s+\|\s+monthly_listens=(\d+)\s+\|\s+position=(\d+)$/.exec(line);
+  if (!match) {
+    throw new BackendRunnerError(
+      "BACKEND_INVALID_OUTPUT",
+      "top-listen output contained an invalid track line.",
+      { line },
+    );
+  }
+
+  return {
+    title: match[2].trim(),
+    artists:
+      match[3].trim() === ""
+        ? []
+        : match[3]
+            .split(",")
+            .map((artist) => artist.trim())
+            .filter((artist) => artist !== ""),
+    monthlyListens: Number(match[4]),
+    position: Number(match[5]),
+  };
+}
+
+function parseTopListenOutput(request: TopListenRequest | undefined, stdout: string): MonthlyTopData {
+  const lines = stdout
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line !== "");
+
+  const expectedHeader = request?.mode === "least" ? "Least Played:" : "Most Played:";
+  if (lines.length < 1 || lines[0] !== expectedHeader) {
+    throw new BackendRunnerError(
+      "BACKEND_INVALID_OUTPUT",
+      "top-listen output did not include the expected section.",
+      { stdout, expectedHeader },
+    );
+  }
+
+  const entries = lines.slice(1).map(parseTopListenLine);
+
+  return {
+    mostPlayed: request?.mode === "most" ? entries : [],
+    leastPlayed: request?.mode === "least" ? entries : [],
+  };
+}
+
 function normalizeBackendError(
   command: BackendCommand,
   code: string,
@@ -213,13 +264,26 @@ function normalizeBackendError(
 export function normalizeBackendEnvelope(
   command: BackendCommand,
   result: BackendProcessResult,
-  listRequest?: ListTracksRequest,
+  request?: ListTracksRequest | TopListenRequest,
+  topListenRequest?: TopListenRequest,
 ): BackendEnvelope<BackendData> {
+  const listRequest =
+    command === "list" ? (request as ListTracksRequest | undefined) : undefined;
+  const resolvedTopListenRequest =
+    command === "top-listen"
+      ? topListenRequest ?? (request as TopListenRequest | undefined)
+      : undefined;
   const trimmed = result.stdout.trim();
   if ((result.exitCode ?? 1) !== 0) {
     const message = result.stderr.trim() || trimmed || `Backend exited with code ${String(result.exitCode)}`;
     const code =
-      command === "sync" ? "SYNC_FAILED" : command === "list" ? "LIST_FAILED" : "SHOW_CONFIG_FAILED";
+      command === "sync"
+        ? "SYNC_FAILED"
+        : command === "list"
+          ? "LIST_FAILED"
+          : command === "top-listen"
+            ? "TOP_LISTEN_FAILED"
+            : "SHOW_CONFIG_FAILED";
 
     return normalizeBackendError(command, code, message, {
       stdout: trimmed,
@@ -241,7 +305,9 @@ export function normalizeBackendEnvelope(
         ? parseShowConfigOutput(trimmed)
         : command === "sync"
           ? parseSyncOutput(trimmed)
-          : parseListOutput(listRequest, trimmed);
+          : command === "list"
+            ? parseListOutput(listRequest, trimmed)
+            : parseTopListenOutput(resolvedTopListenRequest, trimmed);
 
     return {
       ok: true,
@@ -272,10 +338,15 @@ function listRequestArgs(request: ListTracksRequest): string[] {
 
 export async function runBackendCommand<C extends BackendCommand>(
   command: C,
-  listRequest?: ListTracksRequest,
+  request?: ListTracksRequest | TopListenRequest,
   env: BackendRuntimeEnv = process.env,
 ): Promise<BackendEnvelope<CommandDataMap[C]>> {
-  const extraArgs = command === "list" && listRequest ? listRequestArgs(listRequest) : [];
+  const extraArgs =
+    command === "list" && request
+      ? listRequestArgs(request as ListTracksRequest)
+      : command === "top-listen" && request
+        ? topListenRequestArgs(request as TopListenRequest)
+        : [];
 
   let invocation: BackendInvocation;
 
@@ -332,8 +403,15 @@ export async function runBackendCommand<C extends BackendCommand>(
           stdout,
           stderr,
           exitCode,
-        }, listRequest) as BackendEnvelope<CommandDataMap[C]>,
+        },
+        command === "list" ? (request as ListTracksRequest | undefined) : undefined,
+        command === "top-listen" ? (request as TopListenRequest | undefined) : undefined,
+        ) as BackendEnvelope<CommandDataMap[C]>,
       );
     });
   });
+}
+
+function topListenRequestArgs(request: TopListenRequest): string[] {
+  return request.mode === "most" ? ["--most"] : ["--least"];
 }

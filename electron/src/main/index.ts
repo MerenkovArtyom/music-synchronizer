@@ -2,7 +2,7 @@ import path from "node:path";
 
 import { app, BrowserWindow, ipcMain } from "electron";
 
-import type { ListTracksRequest } from "../shared/contracts.js";
+import type { ListTracksRequest, TopListenRequest } from "../shared/contracts.js";
 import { runBackendCommand } from "./backend.js";
 
 const runtimeEnv = {
@@ -40,6 +40,10 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle("music-sync:list", async (_event, request: ListTracksRequest) => {
     return await runBackendCommand("list", request, runtimeEnv);
+  });
+
+  ipcMain.handle("music-sync:top-listen", async (_event, request: TopListenRequest) => {
+    return await runBackendCommand("top-listen", request, runtimeEnv);
   });
 }
 

@@ -1,5 +1,6 @@
-export type BackendCommand = "show-config" | "sync" | "list";
+export type BackendCommand = "show-config" | "sync" | "list" | "top-listen";
 export type FilterKind = "tag" | "artist";
+export type TopListenMode = "most" | "least";
 
 export interface ShowConfigData {
   config: {
@@ -29,6 +30,21 @@ export interface ListData {
   }>;
 }
 
+export interface MonthlyTopData {
+  mostPlayed: Array<{
+    title: string;
+    artists: string[];
+    monthlyListens: number;
+    position: number;
+  }>;
+  leastPlayed: Array<{
+    title: string;
+    artists: string[];
+    monthlyListens: number;
+    position: number;
+  }>;
+}
+
 export interface BackendErrorPayload {
   code: string;
   message: string;
@@ -38,6 +54,10 @@ export interface BackendErrorPayload {
 export interface ListTracksRequest {
   kind: FilterKind;
   value: string;
+}
+
+export interface TopListenRequest {
+  mode: TopListenMode;
 }
 
 export type ConfigData = ShowConfigData;
@@ -60,4 +80,5 @@ export interface RendererApi {
   showConfig: () => Promise<BackendEnvelope<ConfigData>>;
   runSync: () => Promise<BackendEnvelope<SyncData>>;
   listTracks: (request: ListTracksRequest) => Promise<BackendEnvelope<ListData>>;
+  getTopListen: (request: TopListenRequest) => Promise<BackendEnvelope<MonthlyTopData>>;
 }

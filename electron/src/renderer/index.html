@@ -23,6 +23,7 @@
           <a href="#status-title">Status</a>
           <a href="#config-title">Config</a>
           <a href="#list-title">Library</a>
+          <a href="#monthly-top-title">Monthly Top</a>
         </nav>
         <button id="run-sync" class="button-primary topbar-cta" type="button">Run Sync</button>
       </header>
@@ -34,7 +35,7 @@
           <p class="lede">
             The sync engine stays in Python. The desktop layer stays dark, thin, and deliberate:
             secure preload bridge, typed subprocess runner, and focused control over config, sync,
-            and note lookup.
+            note lookup, and monthly listening leaders.
           </p>
         </div>
 
@@ -49,6 +50,7 @@
               <span class="keycap">SYNC</span>
               <span class="keycap">LIST</span>
               <span class="keycap">CFG</span>
+              <span class="keycap">TOP</span>
             </div>
           </div>
 
@@ -61,7 +63,7 @@
               <span id="status-badge" class="badge badge-idle">Idle</span>
             </div>
             <p id="status-message" class="status-message">
-              Load configuration, run sync, or inspect active notes by tag or artist.
+              Load configuration, run sync, inspect active notes, or view monthly listening leaders.
             </p>
           </div>
         </div>
@@ -158,6 +160,30 @@
           </form>
           <div id="list-empty" class="empty-state">No query yet.</div>
           <ul id="track-results" class="results"></ul>
+        </section>
+
+        <section class="surface-card surface-card-wide" aria-labelledby="monthly-top-title">
+          <div class="panel-head">
+            <div>
+              <p class="micro-label">Ranking</p>
+              <h2 id="monthly-top-title">Monthly Top Tracks</h2>
+            </div>
+            <button id="monthly-top-load" class="button-primary" type="button">Load Report</button>
+          </div>
+          <p class="panel-copy">
+            View the ten most-played and ten least-played liked tracks for the last 30 days. Ranking stays in Python.
+          </p>
+          <div id="monthly-top-empty" class="empty-state">No monthly top report loaded yet.</div>
+          <div class="top-grid">
+            <section class="top-column" aria-labelledby="most-played-title">
+              <h3 id="most-played-title">Most Played</h3>
+              <ul id="most-played-results" class="results"></ul>
+            </section>
+            <section class="top-column" aria-labelledby="least-played-title">
+              <h3 id="least-played-title">Least Played</h3>
+              <ul id="least-played-results" class="results"></ul>
+            </section>
+          </div>
         </section>
       </main>
     </div>

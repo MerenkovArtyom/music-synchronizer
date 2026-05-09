@@ -25,6 +25,8 @@ class SavedTrackInfo:
     title: str
     artists: list[str]
     tags: list[str]
+    monthly_listens: int | None = None
+    source_position: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -32,3 +34,11 @@ class SyncSummary:
     added: int
     unchanged: int
     removed: int
+
+
+@dataclass(frozen=True, slots=True)
+class MonthlyTopEntry:
+    title: str
+    artists: list[str]
+    monthly_listens: int
+    source_position: int

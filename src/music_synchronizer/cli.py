@@ -1,11 +1,20 @@
 import typer
 
 from music_synchronizer.config import Settings
+from music_synchronizer.models import MonthlyTopEntry
 from music_synchronizer.obsidian import ObsidianExporter
 from music_synchronizer.sync import SyncService
 
 
 app = typer.Typer(help="CLI for Yandex Music to Obsidian synchronization.")
+
+
+def _format_monthly_top_entry(index: int, entry: MonthlyTopEntry) -> str:
+    artists = ", ".join(entry.artists) if entry.artists else "Unknown Artist"
+    return (
+        f"{index}. {entry.title} - {artists} | "
+        f"monthly_listens={entry.monthly_listens} | position={entry.source_position}"
+    )
 
 
 @app.command("show-config")
@@ -28,6 +37,27 @@ def sync() -> None:
     typer.echo(
         f"Added: {summary.added}, unchanged: {summary.unchanged}, removed: {summary.removed}."
     )
+
+
+@app.command("top-listen")
+def top_listen(
+    most: bool = typer.Option(False, "--most", help="Show the most listened liked tracks."),
+    least: bool = typer.Option(False, "--least", help="Show the least listened liked tracks."),
+) -> None:
+    if most == least:
+        raise typer.BadParameter("Exactly one of --most or --least must be provided.")
+
+    settings = Settings()
+
+    try:
+        entries = SyncService(settings).top_listen_entries(most=most)
+    except RuntimeError as error:
+        typer.secho(f"Top listen failed: {error}", fg=typer.colors.RED, err=True)
+        raise typer.Exit(code=1) from error
+
+    typer.echo("Most Played:" if most else "Least Played:")
+    for index, entry in enumerate(entries, start=1):
+        typer.echo(_format_monthly_top_entry(index, entry))
 
 
 @app.command(

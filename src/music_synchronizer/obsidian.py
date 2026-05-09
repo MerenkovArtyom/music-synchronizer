@@ -147,6 +147,18 @@ class ObsidianExporter:
 
         return matching_tracks
 
+    def top_listen_tracks(self) -> list[SavedTrackInfo]:
+        saved_tracks: list[SavedTrackInfo] = []
+        if not self.tracks_dir.exists():
+            return saved_tracks
+
+        for path in sorted(self.tracks_dir.glob("*.md")):
+            track = self._read_saved_track(path)
+            if track is not None:
+                saved_tracks.append(track)
+
+        return saved_tracks
+
     def _render_track(self, track: TrackInfo, synced_at: datetime, user_tags: list[str]) -> str:
         artists = ", ".join(track.artists) if track.artists else "Unknown Artist"
         system_tags = self._normalize_tags(track.tags)
@@ -278,6 +290,8 @@ class ObsidianExporter:
         artists = self._read_frontmatter_list(content, "artists")
         user_tags = self._read_optional_frontmatter_list(content, "user_tags")
         system_tags = self._read_optional_frontmatter_list(content, "system_tags")
+        monthly_listens = self._read_optional_frontmatter_int(content, "monthly_listens")
+        source_position = self._read_optional_frontmatter_int(content, "position")
 
         if title is None:
             return None
@@ -290,6 +304,8 @@ class ObsidianExporter:
             title=title,
             artists=artists,
             tags=tags,
+            monthly_listens=monthly_listens,
+            source_position=source_position,
         )
 
     def _read_frontmatter_value(self, content: str, field_name: str) -> str | None:
@@ -302,6 +318,20 @@ class ObsidianExporter:
     def _read_frontmatter_list(self, content: str, field_name: str) -> list[str]:
         parsed_value = self._read_optional_frontmatter_list(content, field_name)
         return parsed_value or []
+
+    def _read_optional_frontmatter_int(self, content: str, field_name: str) -> int | None:
+        match = re.search(rf"^{field_name}:\s*(.+?)$", content, re.MULTILINE)
+        if match is None:
+            return None
+
+        raw_value = match.group(1).strip()
+        if raw_value == "null":
+            return None
+
+        try:
+            return int(raw_value)
+        except ValueError:
+            return None
 
     def _read_optional_frontmatter_list(self, content: str, field_name: str) -> list[str] | None:
         match = re.search(rf"^{field_name}:\s*(\[[^\n]*\])$", content, re.MULTILINE)

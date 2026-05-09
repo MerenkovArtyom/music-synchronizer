@@ -4,6 +4,7 @@ import pytest
 from typer.testing import CliRunner
 
 from music_synchronizer.cli import app
+from music_synchronizer.models import MonthlyTopEntry
 
 
 def test_help_shows_sync_placeholder() -> None:
@@ -11,8 +12,117 @@ def test_help_shows_sync_placeholder() -> None:
 
     assert result.exit_code == 0
     assert "list" in result.output
+    assert "monthly-top" not in result.output
     assert "sync" in result.output
     assert "show-config" in result.output
+    assert "top-listen" in result.output
+
+
+def test_top_listen_most_prints_most_played_section(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setenv("YANDEX_MUSIC_TOKEN", "token")
+    monkeypatch.setenv("OBSIDIAN_VAULT_PATH", str(tmp_path))
+
+    entries = [
+        MonthlyTopEntry(
+            title="Loud Song",
+            artists=["Artist", "Guest"],
+            monthly_listens=9,
+            source_position=2,
+        )
+    ]
+
+    class FakeSyncService:
+        def __init__(self, settings: object) -> None:
+            self.settings = settings
+
+        def top_listen_entries(self, *, most: bool) -> list[MonthlyTopEntry]:
+            assert most is True
+            return entries
+
+    monkeypatch.setattr("music_synchronizer.cli.SyncService", FakeSyncService)
+
+    result = CliRunner().invoke(app, ["top-listen", "--most"])
+
+    assert result.exit_code == 0
+    assert result.output.strip().splitlines() == [
+        "Most Played:",
+        "1. Loud Song - Artist, Guest | monthly_listens=9 | position=2",
+    ]
+
+
+def test_top_listen_least_prints_least_played_section(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setenv("YANDEX_MUSIC_TOKEN", "token")
+    monkeypatch.setenv("OBSIDIAN_VAULT_PATH", str(tmp_path))
+
+    entries = [
+        MonthlyTopEntry(
+            title="Quiet Song",
+            artists=["Solo"],
+            monthly_listens=1,
+            source_position=7,
+        )
+    ]
+
+    class FakeSyncService:
+        def __init__(self, settings: object) -> None:
+            self.settings = settings
+
+        def top_listen_entries(self, *, most: bool) -> list[MonthlyTopEntry]:
+            assert most is False
+            return entries
+
+    monkeypatch.setattr("music_synchronizer.cli.SyncService", FakeSyncService)
+
+    result = CliRunner().invoke(app, ["top-listen", "--least"])
+
+    assert result.exit_code == 0
+    assert result.output.strip().splitlines() == [
+        "Least Played:",
+        "1. Quiet Song - Solo | monthly_listens=1 | position=7",
+    ]
+
+
+def test_top_listen_reports_backend_errors(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setenv("YANDEX_MUSIC_TOKEN", "token")
+    monkeypatch.setenv("OBSIDIAN_VAULT_PATH", str(tmp_path))
+
+    class FakeSyncService:
+        def __init__(self, settings: object) -> None:
+            self.settings = settings
+
+        def top_listen_entries(self, *, most: bool) -> list[MonthlyTopEntry]:
+            raise RuntimeError("history unavailable")
+
+    monkeypatch.setattr("music_synchronizer.cli.SyncService", FakeSyncService)
+
+    result = CliRunner().invoke(app, ["top-listen", "--most"])
+
+    assert result.exit_code == 1
+    assert result.stdout == ""
+    assert result.stderr.strip() == "Top listen failed: history unavailable"
+
+
+def test_top_listen_requires_exactly_one_flag() -> None:
+    result = CliRunner().invoke(app, ["top-listen"])
+
+    assert result.exit_code == 2
+    assert "Exactly one of --most or --least must be provided." in result.output
+
+
+def test_top_listen_rejects_both_flags() -> None:
+    result = CliRunner().invoke(app, ["top-listen", "--most", "--least"])
+
+    assert result.exit_code == 2
+    assert "Exactly one of --most or --least must be provided." in result.output
 
 
 def test_list_filters_active_tracks_by_tag(

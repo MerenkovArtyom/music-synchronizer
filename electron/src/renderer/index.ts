@@ -4,7 +4,9 @@ import type {
   FilterKind,
   ListData,
   ListTracksRequest,
+  MonthlyTopData,
   SyncData,
+  TopListenRequest,
 } from "../shared/contracts.js";
 
 const statusBadge = document.querySelector<HTMLSpanElement>("#status-badge");
@@ -12,6 +14,7 @@ const statusMessage = document.querySelector<HTMLParagraphElement>("#status-mess
 const refreshConfigButton = document.querySelector<HTMLButtonElement>("#refresh-config");
 const runSyncButton = document.querySelector<HTMLButtonElement>("#run-sync");
 const listSubmitButton = document.querySelector<HTMLButtonElement>("#list-submit");
+const monthlyTopButton = document.querySelector<HTMLButtonElement>("#monthly-top-load");
 const configDetails = document.querySelector<HTMLElement>("#config-details");
 const syncSummary = document.querySelector<HTMLElement>("#sync-summary");
 const listForm = document.querySelector<HTMLFormElement>("#list-form");
@@ -19,6 +22,9 @@ const filterKind = document.querySelector<HTMLSelectElement>("#filter-kind");
 const filterValue = document.querySelector<HTMLInputElement>("#filter-value");
 const listEmpty = document.querySelector<HTMLElement>("#list-empty");
 const trackResults = document.querySelector<HTMLUListElement>("#track-results");
+const monthlyTopEmpty = document.querySelector<HTMLElement>("#monthly-top-empty");
+const mostPlayedResults = document.querySelector<HTMLUListElement>("#most-played-results");
+const leastPlayedResults = document.querySelector<HTMLUListElement>("#least-played-results");
 
 function updateStatus(
   state: "idle" | "busy" | "success" | "error",
@@ -43,6 +49,9 @@ function setBusy(isBusy: boolean): void {
   }
   if (listSubmitButton) {
     listSubmitButton.disabled = isBusy;
+  }
+  if (monthlyTopButton) {
+    monthlyTopButton.disabled = isBusy;
   }
 }
 
@@ -102,6 +111,43 @@ function renderTracks(data: ListData): void {
     `;
     trackResults.appendChild(item);
   }
+}
+
+function renderMonthlyTopList(
+  target: HTMLUListElement | null,
+  entries: MonthlyTopData["mostPlayed"],
+): void {
+  if (!target) {
+    return;
+  }
+
+  target.innerHTML = "";
+
+  for (const entry of entries) {
+    const item = document.createElement("li");
+    item.innerHTML = `
+      <span class="track-title">${escapeHtml(entry.title)}</span>
+      <span class="track-artists">${escapeHtml(entry.artists.join(", ") || "Unknown Artist")}</span>
+      <span class="track-meta">${escapeHtml(`Monthly listens: ${entry.monthlyListens} | Like position: ${entry.position}`)}</span>
+    `;
+    target.appendChild(item);
+  }
+}
+
+function renderMonthlyTop(data: MonthlyTopData): void {
+  renderMonthlyTopList(mostPlayedResults, data.mostPlayed);
+  renderMonthlyTopList(leastPlayedResults, data.leastPlayed);
+
+  if (!monthlyTopEmpty) {
+    return;
+  }
+
+  if (data.mostPlayed.length === 0 && data.leastPlayed.length === 0) {
+    monthlyTopEmpty.textContent = "No liked tracks available for the monthly top report.";
+    return;
+  }
+
+  monthlyTopEmpty.textContent = `Loaded ${data.mostPlayed.length} most-played and ${data.leastPlayed.length} least-played tracks.`;
 }
 
 function errorSummary<T>(result: BackendEnvelope<T>): string {
@@ -183,6 +229,43 @@ async function handleList(event: SubmitEvent): Promise<void> {
   setBusy(false);
 }
 
+async function loadMonthlyTop(): Promise<void> {
+  setBusy(true);
+  updateStatus("busy", "Ranking", "Loading monthly listening leaders from the Python backend.");
+
+  const mostRequest: TopListenRequest = { mode: "most" };
+  const leastRequest: TopListenRequest = { mode: "least" };
+  const [mostResult, leastResult] = await Promise.all([
+    window.musicSync.getTopListen(mostRequest),
+    window.musicSync.getTopListen(leastRequest),
+  ]);
+
+  if (mostResult.ok && leastResult.ok) {
+    renderMonthlyTop({
+      mostPlayed: mostResult.data.mostPlayed,
+      leastPlayed: leastResult.data.leastPlayed,
+    });
+    updateStatus("success", "Ranked", "Monthly top report loaded from the Python backend.");
+  } else {
+    if (monthlyTopEmpty) {
+      monthlyTopEmpty.textContent = "Monthly top request failed.";
+    }
+    if (mostPlayedResults) {
+      mostPlayedResults.innerHTML = "";
+    }
+    if (leastPlayedResults) {
+      leastPlayedResults.innerHTML = "";
+    }
+    updateStatus(
+      "error",
+      "Ranking Error",
+      errorSummary(mostResult.ok ? leastResult : mostResult),
+    );
+  }
+
+  setBusy(false);
+}
+
 refreshConfigButton?.addEventListener("click", () => {
   void loadConfig();
 });
@@ -193,6 +276,10 @@ runSyncButton?.addEventListener("click", () => {
 
 listForm?.addEventListener("submit", (event) => {
   void handleList(event);
+});
+
+monthlyTopButton?.addEventListener("click", () => {
+  void loadMonthlyTop();
 });
 
 void loadConfig();
