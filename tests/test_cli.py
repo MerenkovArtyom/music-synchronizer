@@ -69,14 +69,50 @@ def test_dashboard_command_prints_summary(
     monkeypatch.setenv("OBSIDIAN_VAULT_PATH", str(tmp_path))
     dashboard = _dashboard_data()
 
-    class FakeSyncService:
-        def __init__(self, settings: object) -> None:
-            self.settings = settings
+    class FakeMusicSyncApp:
+        def dashboard(self) -> dict[str, object]:
+            return {
+                "path": str(tmp_path / "dashboard.md"),
+                "summary": {
+                    "likedTracks": 3,
+                    "removedTracks": 1,
+                    "totalTracks": 4,
+                    "totalDuration": "12:00",
+                    "monthlyListensKnown": 2,
+                    "monthlyListensCoveragePercent": 66.67,
+                    "averageMonthlyListens": 5.0,
+                    "medianMonthlyListens": 5.0,
+                    "mostListenedTrack": {
+                        "title": "First",
+                        "artists": ["Artist A"],
+                        "monthlyListens": 7,
+                    },
+                    "mostListenedArtist": {
+                        "name": "Artist A",
+                        "monthlyListens": 10,
+                        "tracks": 2,
+                    },
+                    "mostUsedTag": {
+                        "name": "indie",
+                        "tracks": 2,
+                    },
+                    "longestTrack": {
+                        "title": "Third",
+                        "artists": ["Artist B"],
+                        "duration": "5:00",
+                    },
+                },
+                "topTags": [
+                    {"name": "indie", "tracks": 2},
+                    {"name": "focus", "tracks": 2},
+                ],
+                "topArtists": [
+                    {"name": "Artist A", "monthlyListens": 10, "tracks": 2},
+                    {"name": "Artist B", "monthlyListens": 0, "tracks": 1},
+                ],
+            }
 
-        def refresh_dashboard(self) -> DashboardData:
-            return dashboard
-
-    monkeypatch.setattr("music_synchronizer.cli.SyncService", FakeSyncService)
+    monkeypatch.setattr("music_synchronizer.cli._build_app", lambda: FakeMusicSyncApp())
 
     result = CliRunner().invoke(app, ["dashboard"])
 
@@ -104,6 +140,71 @@ def test_dashboard_command_prints_summary(
     ]
 
 
+def test_show_config_delegates_to_shared_app_backend(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setenv("YANDEX_MUSIC_TOKEN", "token")
+    monkeypatch.setenv("OBSIDIAN_VAULT_PATH", str(tmp_path))
+
+    class FakeMusicSyncApp:
+        def __init__(self) -> None:
+            self.called = False
+
+        def show_config(self) -> dict[str, object]:
+            self.called = True
+            return {
+                "config": {
+                    "yandexMusicTokenPresent": True,
+                    "obsidianVaultPath": str(tmp_path),
+                    "logLevel": "INFO",
+                }
+            }
+
+    fake_app = FakeMusicSyncApp()
+    monkeypatch.setattr("music_synchronizer.cli.MusicSyncApp", lambda: fake_app)
+
+    result = CliRunner().invoke(app, ["show-config"])
+
+    assert result.exit_code == 0
+    assert fake_app.called is True
+    assert result.output.strip().splitlines() == [
+        f"Obsidian path: {tmp_path}",
+        "Log level: INFO",
+    ]
+
+
+def test_sync_uses_project_dotenv_even_when_cwd_differs(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("YANDEX_MUSIC_TOKEN", raising=False)
+    monkeypatch.setenv("OBSIDIAN_VAULT_PATH", str(tmp_path))
+
+    result = CliRunner().invoke(app, ["sync"])
+
+    assert result.exit_code == 0
+    assert "Added:" in result.output
+
+
+def test_show_config_uses_project_dotenv_even_when_cwd_differs(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("YANDEX_MUSIC_TOKEN", raising=False)
+    monkeypatch.setenv("OBSIDIAN_VAULT_PATH", str(tmp_path))
+
+    result = CliRunner().invoke(app, ["show-config"])
+
+    assert result.exit_code == 0
+    assert result.output.strip().splitlines() == [
+        f"Obsidian path: {tmp_path}",
+        "Log level: INFO",
+    ]
+
+
 def test_dashboard_reports_backend_errors(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -111,14 +212,11 @@ def test_dashboard_reports_backend_errors(
     monkeypatch.setenv("YANDEX_MUSIC_TOKEN", "token")
     monkeypatch.setenv("OBSIDIAN_VAULT_PATH", str(tmp_path))
 
-    class FakeSyncService:
-        def __init__(self, settings: object) -> None:
-            self.settings = settings
-
-        def refresh_dashboard(self) -> DashboardData:
+    class FakeMusicSyncApp:
+        def dashboard(self) -> dict[str, object]:
             raise RuntimeError("dashboard unavailable")
 
-    monkeypatch.setattr("music_synchronizer.cli.SyncService", FakeSyncService)
+    monkeypatch.setattr("music_synchronizer.cli._build_app", lambda: FakeMusicSyncApp())
 
     result = CliRunner().invoke(app, ["dashboard"])
 
@@ -143,15 +241,22 @@ def test_top_listen_most_prints_most_played_section(
         )
     ]
 
-    class FakeSyncService:
-        def __init__(self, settings: object) -> None:
-            self.settings = settings
+    class FakeMusicSyncApp:
+        def top_listen(self, *, mode: str) -> dict[str, object]:
+            assert mode == "most"
+            return {
+                "mostPlayed": [
+                    {
+                        "title": "Loud Song",
+                        "artists": ["Artist", "Guest"],
+                        "monthlyListens": 9,
+                        "position": 2,
+                    }
+                ],
+                "leastPlayed": [],
+            }
 
-        def top_listen_entries(self, *, most: bool) -> list[MonthlyTopEntry]:
-            assert most is True
-            return entries
-
-    monkeypatch.setattr("music_synchronizer.cli.SyncService", FakeSyncService)
+    monkeypatch.setattr("music_synchronizer.cli._build_app", lambda: FakeMusicSyncApp())
 
     result = CliRunner().invoke(app, ["top-listen", "--most"])
 
@@ -178,15 +283,22 @@ def test_top_listen_least_prints_least_played_section(
         )
     ]
 
-    class FakeSyncService:
-        def __init__(self, settings: object) -> None:
-            self.settings = settings
+    class FakeMusicSyncApp:
+        def top_listen(self, *, mode: str) -> dict[str, object]:
+            assert mode == "least"
+            return {
+                "mostPlayed": [],
+                "leastPlayed": [
+                    {
+                        "title": "Quiet Song",
+                        "artists": ["Solo"],
+                        "monthlyListens": 1,
+                        "position": 7,
+                    }
+                ],
+            }
 
-        def top_listen_entries(self, *, most: bool) -> list[MonthlyTopEntry]:
-            assert most is False
-            return entries
-
-    monkeypatch.setattr("music_synchronizer.cli.SyncService", FakeSyncService)
+    monkeypatch.setattr("music_synchronizer.cli._build_app", lambda: FakeMusicSyncApp())
 
     result = CliRunner().invoke(app, ["top-listen", "--least"])
 
@@ -204,14 +316,11 @@ def test_top_listen_reports_backend_errors(
     monkeypatch.setenv("YANDEX_MUSIC_TOKEN", "token")
     monkeypatch.setenv("OBSIDIAN_VAULT_PATH", str(tmp_path))
 
-    class FakeSyncService:
-        def __init__(self, settings: object) -> None:
-            self.settings = settings
-
-        def top_listen_entries(self, *, most: bool) -> list[MonthlyTopEntry]:
+    class FakeMusicSyncApp:
+        def top_listen(self, *, mode: str) -> dict[str, object]:
             raise RuntimeError("history unavailable")
 
-    monkeypatch.setattr("music_synchronizer.cli.SyncService", FakeSyncService)
+    monkeypatch.setattr("music_synchronizer.cli._build_app", lambda: FakeMusicSyncApp())
 
     result = CliRunner().invoke(app, ["top-listen", "--most"])
 
@@ -491,14 +600,11 @@ def test_sync_creates_structured_obsidian_files(
     tmp_path: Path,
 ) -> None:
     from music_synchronizer import cli
-    from music_synchronizer.models import SyncSummary, TrackInfo
+    from music_synchronizer.models import TrackInfo
 
-    class FakeSyncService:
-        def __init__(self, settings: object) -> None:
-            self.settings = settings
-
-        def run(self) -> SyncSummary:
-            vault = self.settings.obsidian_vault_path
+    class FakeMusicSyncApp:
+        def sync(self) -> dict[str, object]:
+            vault = tmp_path
             (vault / "tracks").mkdir(parents=True, exist_ok=True)
             (vault / "tracks" / "Song.md").write_text(
                 TrackInfo(
@@ -515,11 +621,18 @@ def test_sync_creates_structured_obsidian_files(
                 ).title,
                 encoding="utf-8",
             )
-            return SyncSummary(added=1, unchanged=2, removed=3)
+            return {
+                "summary": {
+                    "added": 1,
+                    "unchanged": 2,
+                    "archived": 3,
+                    "removed": 3,
+                }
+            }
 
     monkeypatch.setenv("YANDEX_MUSIC_TOKEN", "token")
     monkeypatch.setenv("OBSIDIAN_VAULT_PATH", str(tmp_path))
-    monkeypatch.setattr(cli, "SyncService", FakeSyncService)
+    monkeypatch.setattr(cli, "_build_app", lambda: FakeMusicSyncApp())
 
     result = CliRunner().invoke(app, ["sync"])
 
@@ -535,16 +648,13 @@ def test_sync_does_not_create_partial_files_when_service_fails(
 ) -> None:
     from music_synchronizer import cli
 
-    class FailingSyncService:
-        def __init__(self, settings: object) -> None:
-            self.settings = settings
-
-        def run(self) -> object:
+    class FailingMusicSyncApp:
+        def sync(self) -> dict[str, object]:
             raise RuntimeError("boom")
 
     monkeypatch.setenv("YANDEX_MUSIC_TOKEN", "token")
     monkeypatch.setenv("OBSIDIAN_VAULT_PATH", str(tmp_path))
-    monkeypatch.setattr(cli, "SyncService", FailingSyncService)
+    monkeypatch.setattr(cli, "_build_app", lambda: FailingMusicSyncApp())
 
     result = CliRunner().invoke(app, ["sync"])
 

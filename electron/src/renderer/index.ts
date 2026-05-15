@@ -15,6 +15,7 @@ const statusMessage = document.querySelector<HTMLParagraphElement>("#status-mess
 const refreshConfigButton = document.querySelector<HTMLButtonElement>("#refresh-config");
 const runSyncButton = document.querySelector<HTMLButtonElement>("#run-sync");
 const dashboardButton = document.querySelector<HTMLButtonElement>("#dashboard-load");
+const dashboardInlineButton = document.querySelector<HTMLButtonElement>("#dashboard-load-inline");
 const listSubmitButton = document.querySelector<HTMLButtonElement>("#list-submit");
 const monthlyTopButton = document.querySelector<HTMLButtonElement>("#monthly-top-load");
 const configDetails = document.querySelector<HTMLElement>("#config-details");
@@ -56,6 +57,9 @@ function setBusy(isBusy: boolean): void {
   }
   if (dashboardButton) {
     dashboardButton.disabled = isBusy;
+  }
+  if (dashboardInlineButton) {
+    dashboardInlineButton.disabled = isBusy;
   }
   if (listSubmitButton) {
     listSubmitButton.disabled = isBusy;
@@ -402,6 +406,10 @@ runSyncButton?.addEventListener("click", () => {
 });
 
 dashboardButton?.addEventListener("click", () => {
+  void loadDashboard();
+});
+
+dashboardInlineButton?.addEventListener("click", () => {
   void loadDashboard();
 });
 

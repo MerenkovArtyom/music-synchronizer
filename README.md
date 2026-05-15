@@ -9,10 +9,11 @@
 - поддерживать заметки в актуальном состоянии при повторных запусках;
 - не затирать пользовательские теги, добавленные вручную.
 
-Главная команда:
+Главные команды:
 
 ```bash
 uv run music-sync
+uv run music-sync-app show-config
 ```
 
 ## Возможности
@@ -90,6 +91,7 @@ uv run music-sync top-listen --most
 uv run music-sync top-listen --least
 uv run music-sync list --tag "rock"
 uv run music-sync list --artist "Artist Name"
+uv run music-sync-app show-config
 ```
 
 Что делают команды:
@@ -102,6 +104,7 @@ uv run music-sync list --artist "Artist Name"
 - `uv run music-sync top-listen --least` — показывает top 10 локально сохранённых треков с самым маленьким `monthly_listens`.
 - `uv run music-sync list --tag "rock"` — ищет активные сохранённые треки по тегу.
 - `uv run music-sync list --artist "Artist Name"` — ищет активные сохранённые треки по артисту.
+- `uv run music-sync-app ...` — machine-readable backend entrypoint для desktop app; печатает JSON envelope вместо человекочитаемого текста.
 
 Особенности команды `list`:
 
@@ -239,12 +242,31 @@ uv run pytest tests/test_yandex_client.py -v
 
 ## Electron-прототип
 
-В репозитории также есть прототип desktop-оболочки в [electron/](/Users/artem/Programming/music_synchronizer/electron).
+В репозитории также есть desktop-оболочка в [electron/](/Users/artem/Programming/music_synchronizer/electron).
 
 Важно:
 
-- это тонкая оболочка над существующим Python CLI;
-- текущий backend для Electron по умолчанию запускает `uv run music-sync`;
+- это оболочка над общим Python app-backend;
+- текущий backend для Electron по умолчанию запускает `uv run music-sync-app`;
 - Electron-часть пока не заменяет и не дублирует основную логику синхронизации.
+
+Команды для Electron:
+
+```bash
+cd electron
+npm run test
+npm run typecheck
+npm run build
+npm run dev
+npm run package
+npm run package:mac
+```
+
+Что важно про `npm run package`:
+
+- команда подготавливает packaged-layout backend в `electron/dist/package/backend`;
+- внутри staging-бандла лежат `src/`, локальный `.venv` и launcher `music-sync-app`;
+- это MVP для standalone-layout и он зависит от локально собранного окружения, а не от универсального инсталлера.
+- `npm run package:mac` создаёт локальный macOS `.app` bundle в `electron/release/`.
 
 Подробности по desktop-прототипу лежат в [electron/README.md](/Users/artem/Programming/music_synchronizer/electron/README.md).

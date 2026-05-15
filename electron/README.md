@@ -1,6 +1,6 @@
 # Electron Prototype
 
-Это desktop-прототип для существующего Python backend из корня репозитория. Electron-часть не дублирует логику синхронизации и не ходит в Яндекс Музыку напрямую: она только запускает CLI, получает результат и показывает его в интерфейсе.
+Это desktop-оболочка для существующего Python backend из корня репозитория. Electron-часть не дублирует логику синхронизации и не ходит в Яндекс Музыку напрямую: она запускает отдельный Python app-backend, получает JSON-ответ и показывает его в интерфейсе.
 
 ## Что уже есть
 
@@ -12,7 +12,7 @@
 - безопасный preload-bridge через `window.musicSync`;
 - IPC между renderer и main-процессом;
 - запуск Python backend как дочернего процесса;
-- нормализация ответов backend в единый типизированный envelope;
+- нормализация JSON-ответов backend в единый типизированный envelope;
 - тесты для разбора backend-команд и CLI-ответов.
 
 ## Архитектура
@@ -26,7 +26,8 @@
 Текущая модель ответственности такая:
 
 - Python отвечает за реальные данные и бизнес-логику.
-- Electron отвечает за запуск команд, преобразование результатов и UI.
+- Electron отвечает за запуск backend-команд, IPC и UI.
+- CLI остаётся отдельным пользовательским интерфейсом над тем же Python app-backend.
 
 ## Команды
 
@@ -38,6 +39,8 @@ npm run test
 npm run typecheck
 npm run build
 npm run dev
+npm run package
+npm run package:mac
 ```
 
 Что делают команды:
@@ -47,15 +50,17 @@ npm run dev
 - `npm run typecheck` — проверяет типы TypeScript без сборки.
 - `npm run build` — очищает `dist/`, проверяет типы и собирает main/preload/renderer.
 - `npm run dev` — сначала выполняет `build`, затем запускает `electron .`.
+- `npm run package` — собирает Electron-часть и подготавливает `dist/package/backend` с локальным Python backend для packaged-layout сценария.
+- `npm run package:mac` — создаёт настоящий macOS `.app` bundle в `release/mac-arm64/` или `release/mac/`.
 
 Важно: `npm run dev` сейчас не даёт hot reload. По факту это локальный запуск уже собранного приложения.
 
 ## Как Electron находит backend
 
-По умолчанию desktop shell запускает backend-команду:
+По умолчанию desktop shell в dev-режиме запускает backend-команду:
 
 ```bash
-uv run music-sync
+uv run music-sync-app
 ```
 
 Команда выполняется из корня репозитория через `MUSIC_SYNC_REPO_ROOT`. Это нужно, чтобы Electron мог использовать тот же Python CLI, что и основное приложение.
@@ -63,7 +68,7 @@ uv run music-sync
 Для локальных экспериментов backend можно переопределить переменной окружения:
 
 ```bash
-MUSIC_SYNC_BACKEND_COMMAND='["uv", "run", "music-sync"]' npm run dev
+MUSIC_SYNC_BACKEND_COMMAND='["uv", "run", "music-sync-app"]' npm run dev
 ```
 
 Правила для `MUSIC_SYNC_BACKEND_COMMAND`:
@@ -110,12 +115,12 @@ type BackendEnvelope<T> =
 
 Сейчас адаптер ожидает от Python CLI текстовый вывод, а не JSON:
 
-- `show-config` должен вернуть строки `Obsidian path: ...` и `Log level: ...`;
-- `sync` должен вернуть строку вида `Added: X, unchanged: Y, removed: Z.`;
-- `dashboard` должен вернуть path dashboard-файла, числовые summary-поля и секции `top_tags:` / `top_artists:` в стабильном текстовом формате;
-- `list` должен вернуть либо список строк формата `Title - Artist`, либо сообщение об отсутствии результатов.
-- `top-listen --most` должен вернуть секцию `Most Played:` со строками формата `N. Title - Artist | monthly_listens=X | position=Y`.
-- `top-listen --least` должен вернуть секцию `Least Played:` со строками того же формата.
+- backend должен вернуть JSON envelope вида `{ ok, command, data }` или `{ ok, command, error }`;
+- `show-config` возвращает машиночитаемый config summary;
+- `sync` возвращает структурированный summary;
+- `dashboard` возвращает path dashboard-файла, summary и top-списки;
+- `list` возвращает filter + массив треков;
+- `top-listen` возвращает `mostPlayed` или `leastPlayed`.
 
 Если backend завершается с ошибкой или отдаёт неожиданный формат, Electron строит структурированный error envelope.
 
@@ -136,8 +141,9 @@ type BackendEnvelope<T> =
 
 - Python runtime и окружение пока не упаковываются внутрь desktop-приложения.
 - Прототип ожидает, что `uv` и backend проекта доступны локально.
-- Парсинг построен вокруг текущего текстового CLI-вывода, поэтому изменение формата сообщений Python backend потребует синхронного обновления Electron-адаптера.
-- Hot reload и packaging пока не реализованы.
+- Первая packaged-версия опирается на локально собранный `.venv`, поэтому артефакт привязан к текущей платформе и архитектуре.
+- `npm run package:mac` собирает локальный unsigned `.app`, но ещё не делает DMG, signing или notarization.
+- Hot reload пока не реализован.
 
 ## Куда смотреть в коде
 

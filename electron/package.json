@@ -8,12 +8,39 @@
     "clean": "rm -rf dist",
     "build": "npm run clean && tsc --noEmit -p tsconfig.json && node ./scripts/build.mjs",
     "dev": "npm run build && electron .",
+    "package": "npm run build && node ./scripts/package-backend.mjs",
+    "package:mac": "npm run package && electron-builder --mac dir",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "node --import tsx --test tests/*.test.ts"
+  },
+  "build": {
+    "appId": "dev.artem.music-synchronizer",
+    "productName": "Music Synchronizer",
+    "asar": true,
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "dist/package/backend",
+        "to": "backend"
+      }
+    ],
+    "mac": {
+      "target": [
+        "dir"
+      ],
+      "category": "public.app-category.music"
+    }
   },
   "devDependencies": {
     "@types/node": "^24.9.1",
     "electron": "^37.2.0",
+    "electron-builder": "^26.8.1",
     "esbuild": "^0.25.11",
     "tsx": "^4.20.6",
     "typescript": "^5.9.3"

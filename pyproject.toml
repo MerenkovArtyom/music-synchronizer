@@ -13,6 +13,7 @@ dependencies = [
 
 [project.scripts]
 music-sync = "music_synchronizer.cli:app"
+music-sync-app = "music_synchronizer.backend_cli:entrypoint"
 
 [dependency-groups]
 dev = [

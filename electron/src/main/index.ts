@@ -31,23 +31,38 @@ function createWindow(): BrowserWindow {
 
 function registerIpcHandlers(): void {
   ipcMain.handle("music-sync:show-config", async () => {
-    return await runBackendCommand("show-config", undefined, runtimeEnv);
+    return await runBackendCommand("show-config", undefined, runtimeEnv, {
+      isPackaged: app.isPackaged,
+      appPath: app.getAppPath(),
+    });
   });
 
   ipcMain.handle("music-sync:sync", async () => {
-    return await runBackendCommand("sync", undefined, runtimeEnv);
+    return await runBackendCommand("sync", undefined, runtimeEnv, {
+      isPackaged: app.isPackaged,
+      appPath: app.getAppPath(),
+    });
   });
 
   ipcMain.handle("music-sync:list", async (_event, request: ListTracksRequest) => {
-    return await runBackendCommand("list", request, runtimeEnv);
+    return await runBackendCommand("list", request, runtimeEnv, {
+      isPackaged: app.isPackaged,
+      appPath: app.getAppPath(),
+    });
   });
 
   ipcMain.handle("music-sync:top-listen", async (_event, request: TopListenRequest) => {
-    return await runBackendCommand("top-listen", request, runtimeEnv);
+    return await runBackendCommand("top-listen", request, runtimeEnv, {
+      isPackaged: app.isPackaged,
+      appPath: app.getAppPath(),
+    });
   });
 
   ipcMain.handle("music-sync:dashboard", async () => {
-    return await runBackendCommand("dashboard", undefined, runtimeEnv);
+    return await runBackendCommand("dashboard", undefined, runtimeEnv, {
+      isPackaged: app.isPackaged,
+      appPath: app.getAppPath(),
+    });
   });
 }
 
