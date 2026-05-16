@@ -18,6 +18,7 @@ def test_help_shows_sync_placeholder() -> None:
     assert "show-config" in result.output
     assert "top-listen" in result.output
     assert "recommend" in result.output
+    assert "discovery" in result.output
 
 
 def _dashboard_data() -> DashboardData:
@@ -424,6 +425,89 @@ def test_recommend_reports_backend_errors(
     assert result.exit_code == 1
     assert result.stdout == ""
     assert result.stderr.strip() == "Recommend failed: recommendations unavailable"
+
+
+def test_discovery_prints_summary_only(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setenv("YANDEX_MUSIC_TOKEN", "token")
+    monkeypatch.setenv("OBSIDIAN_VAULT_PATH", str(tmp_path))
+
+    class FakeMusicSyncApp:
+        def discovery(self, *, clear: bool) -> dict[str, object]:
+            assert clear is False
+            return {
+                "summary": {
+                    "added": 4,
+                    "skipped": 1,
+                    "removedLiked": 2,
+                    "cleared": 0,
+                    "total": 5,
+                },
+                "recommendations": [
+                    {
+                        "title": "Popular One",
+                        "artists": ["Artist A"],
+                    }
+                ],
+            }
+
+    monkeypatch.setattr("music_synchronizer.cli._build_app", lambda: FakeMusicSyncApp())
+
+    result = CliRunner().invoke(app, ["discovery"])
+
+    assert result.exit_code == 0
+    assert result.output.strip() == "Discovery updated: added=4, skipped=1, removed_liked=2, total=5."
+
+
+def test_discovery_clear_prints_summary_only(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setenv("YANDEX_MUSIC_TOKEN", "token")
+    monkeypatch.setenv("OBSIDIAN_VAULT_PATH", str(tmp_path))
+
+    class FakeMusicSyncApp:
+        def discovery(self, *, clear: bool) -> dict[str, object]:
+            assert clear is True
+            return {
+                "summary": {
+                    "added": 0,
+                    "skipped": 0,
+                    "removedLiked": 0,
+                    "cleared": 3,
+                    "total": 0,
+                },
+                "recommendations": [],
+            }
+
+    monkeypatch.setattr("music_synchronizer.cli._build_app", lambda: FakeMusicSyncApp())
+
+    result = CliRunner().invoke(app, ["discovery", "--clear"])
+
+    assert result.exit_code == 0
+    assert result.output.strip() == "Discovery cleared: removed=3."
+
+
+def test_discovery_reports_backend_errors(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setenv("YANDEX_MUSIC_TOKEN", "token")
+    monkeypatch.setenv("OBSIDIAN_VAULT_PATH", str(tmp_path))
+
+    class FakeMusicSyncApp:
+        def discovery(self, *, clear: bool) -> dict[str, object]:
+            raise RuntimeError("discovery unavailable")
+
+    monkeypatch.setattr("music_synchronizer.cli._build_app", lambda: FakeMusicSyncApp())
+
+    result = CliRunner().invoke(app, ["discovery"])
+
+    assert result.exit_code == 1
+    assert result.stdout == ""
+    assert result.stderr.strip() == "Discovery failed: discovery unavailable"
 
 
 def test_list_filters_active_tracks_by_tag(

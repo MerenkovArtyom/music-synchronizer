@@ -353,3 +353,149 @@ def test_fetch_liked_tracks_raises_clear_error_when_history_shape_is_unusable(
 
     with pytest.raises(RuntimeError, match="Unable to compute 30-day listen counts"):
         client.fetch_liked_tracks(reference_time=datetime(2026, 5, 8, 12, 0, tzinfo=timezone.utc))
+
+
+def test_fetch_recent_liked_track_ids_returns_latest_unique_liked_tracks(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake_module = ModuleType("yandex_music")
+    history = SimpleNamespace(
+        history_tabs=[
+            SimpleNamespace(
+                date="2026-05-08",
+                items=[
+                    SimpleNamespace(
+                        tracks=[
+                            SimpleNamespace(
+                                type="track",
+                                data=SimpleNamespace(item_id=SimpleNamespace(track_id="2")),
+                            ),
+                            SimpleNamespace(
+                                type="track",
+                                data=SimpleNamespace(item_id=SimpleNamespace(track_id="1")),
+                            ),
+                        ]
+                    )
+                ],
+            ),
+            SimpleNamespace(
+                date="2026-05-07",
+                items=[
+                    SimpleNamespace(
+                        tracks=[
+                            SimpleNamespace(
+                                type="track",
+                                data=SimpleNamespace(item_id=SimpleNamespace(track_id="2")),
+                            ),
+                            SimpleNamespace(
+                                type="track",
+                                data=SimpleNamespace(item_id=SimpleNamespace(track_id="3")),
+                            ),
+                        ]
+                    )
+                ],
+            ),
+        ]
+    )
+
+    class FakeClient:
+        def __init__(self, token: str) -> None:
+            self.token = token
+
+        def init(self) -> "FakeClient":
+            return self
+
+        def music_history(self) -> SimpleNamespace:
+            return history
+
+    fake_module.Client = FakeClient
+    monkeypatch.setitem(sys.modules, "yandex_music", fake_module)
+
+    client = YandexMusicClient(token="token")
+
+    track_ids = client.fetch_recent_liked_track_ids(
+        liked_track_ids={"1", "2", "9"},
+        reference_time=datetime(2026, 5, 8, 12, 0, tzinfo=timezone.utc),
+        limit=2,
+    )
+
+    assert track_ids == ["2", "1"]
+
+
+def test_fetch_popular_tracks_for_artist_seeds_filters_liked_and_broken_tracks(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake_module = ModuleType("yandex_music")
+
+    def make_track(track_id: int, title: str) -> SimpleNamespace:
+        return SimpleNamespace(
+            id=track_id,
+            title=title,
+            artists=[SimpleNamespace(name="Artist A")],
+            albums=[SimpleNamespace(id=77, title="Album", year=2020)],
+            meta_data=SimpleNamespace(genre="indie"),
+            year=2024,
+            duration_ms=245000,
+        )
+
+    artist_track = make_track(10, "Popular One")
+    liked_track = make_track(1, "Already Liked")
+
+    class FakeClient:
+        def __init__(self, token: str) -> None:
+            self.token = token
+
+        def init(self) -> "FakeClient":
+            return self
+
+        def artists_tracks(self, artist_id: str) -> SimpleNamespace:
+            assert artist_id == "artist-1"
+            return SimpleNamespace(tracks=[liked_track, artist_track, SimpleNamespace(id=None)])
+
+    fake_module.Client = FakeClient
+    monkeypatch.setitem(sys.modules, "yandex_music", fake_module)
+
+    client = YandexMusicClient(token="token")
+    client._seed_artists_by_track_id = {"1": [SimpleNamespace(id="artist-1", name="Artist A")]}  # type: ignore[attr-defined]
+
+    tracks = client.fetch_popular_tracks_for_artist_seeds(["1"], exclude_track_ids={"1"})
+
+    assert [track.track_id for track in tracks] == ["10"]
+    assert tracks[0].discovery_sources == ["artist-popular"]
+
+
+def test_fetch_similar_tracks_merges_duplicate_sources_and_skips_invalid(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake_module = ModuleType("yandex_music")
+
+    similar_track = SimpleNamespace(
+        id=20,
+        title="Similar One",
+        artists=[SimpleNamespace(name="Artist B")],
+        albums=[SimpleNamespace(id=88, title="Album", year=2021)],
+        meta_data=SimpleNamespace(genre="ambient"),
+        year=2025,
+        duration_ms=180000,
+    )
+
+    class FakeClient:
+        def __init__(self, token: str) -> None:
+            self.token = token
+
+        def init(self) -> "FakeClient":
+            return self
+
+        def tracks_similar(self, track_id: str) -> SimpleNamespace:
+            assert track_id == "1"
+            return SimpleNamespace(similar_tracks=[similar_track, SimpleNamespace(id=None), similar_track])
+
+    fake_module.Client = FakeClient
+    monkeypatch.setitem(sys.modules, "yandex_music", fake_module)
+
+    client = YandexMusicClient(token="token")
+
+    tracks = client.fetch_similar_tracks(["1"], exclude_track_ids={"1"})
+
+    assert [track.track_id for track in tracks] == ["20"]
+    assert tracks[0].discovery_sources == ["similar"]

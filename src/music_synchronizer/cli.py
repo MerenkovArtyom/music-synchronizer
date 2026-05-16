@@ -223,6 +223,29 @@ def recommend(
         typer.echo(_format_recommendation_entry(index, entry))
 
 
+@app.command("discovery")
+def discovery(
+    clear: bool = typer.Option(False, "--clear", help="Clear saved discovery recommendations."),
+) -> None:
+    try:
+        payload = _build_app().discovery(clear=clear)
+    except RuntimeError as error:
+        typer.secho(f"Discovery failed: {error}", fg=typer.colors.RED, err=True)
+        raise typer.Exit(code=1) from error
+
+    summary = payload["summary"]
+    assert isinstance(summary, dict)
+    if clear:
+        typer.echo(f"Discovery cleared: removed={summary['cleared']}.")
+        return
+
+    typer.echo(
+        "Discovery updated: "
+        f"added={summary['added']}, skipped={summary['skipped']}, "
+        f"removed_liked={summary['removedLiked']}, total={summary['total']}."
+    )
+
+
 @app.command(
     "list",
     context_settings={"allow_extra_args": True, "ignore_unknown_options": False},

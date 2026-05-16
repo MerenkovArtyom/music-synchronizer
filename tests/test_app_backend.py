@@ -4,7 +4,14 @@ import pytest
 
 from music_synchronizer.app import MusicSyncApp
 from music_synchronizer.config import Settings
-from music_synchronizer.models import DashboardData, DashboardStatEntry, MonthlyTopEntry, TrackDashboardEntry
+from music_synchronizer.models import (
+    DashboardData,
+    DashboardStatEntry,
+    DiscoverySummary,
+    DiscoveryTrackInfo,
+    MonthlyTopEntry,
+    TrackDashboardEntry,
+)
 
 
 def _settings(tmp_path: Path) -> Settings:
@@ -150,6 +157,73 @@ def test_recommend_returns_machine_readable_data(monkeypatch: pytest.MonkeyPatch
 
     assert app.recommend(include_archived=True) == {
         "includeArchived": True,
+        "recommendations": [],
+    }
+
+
+def test_discovery_returns_machine_readable_data(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    app = MusicSyncApp(settings=_settings(tmp_path))
+    tracks = [
+        DiscoveryTrackInfo(
+            track_id="10",
+            title="Popular One",
+            artists=["Artist A"],
+            album="Album",
+            system_tags=["indie"],
+            year=2024,
+            cover_url="",
+            duration_seconds=180,
+            yandex_url="https://music.yandex.ru/track/10",
+            monthly_listens=5,
+            discovery_sources=["artist-popular", "similar"],
+        )
+    ]
+    summary = DiscoverySummary(added=1, skipped=0, removed_liked=2, cleared=0, total=4)
+    monkeypatch.setattr(app.service, "discovery_recommendations", lambda: (tracks, summary))
+
+    assert app.discovery(clear=False) == {
+        "summary": {
+            "added": 1,
+            "skipped": 0,
+            "removedLiked": 2,
+            "cleared": 0,
+            "total": 4,
+        },
+        "recommendations": [
+            {
+                "trackId": "10",
+                "title": "Popular One",
+                "artists": ["Artist A"],
+                "album": "Album",
+                "systemTags": ["indie"],
+                "year": 2024,
+                "coverUrl": "",
+                "durationSeconds": 180,
+                "yandexUrl": "https://music.yandex.ru/track/10",
+                "monthlyListens": 5,
+                "discoverySources": ["artist-popular", "similar"],
+                "explain": "artist-popular, similar",
+            }
+        ],
+    }
+
+
+def test_clear_discovery_returns_machine_readable_data(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    app = MusicSyncApp(settings=_settings(tmp_path))
+    monkeypatch.setattr(
+        app.service,
+        "clear_discovery_recommendations",
+        lambda: DiscoverySummary(added=0, skipped=0, removed_liked=0, cleared=3, total=0),
+    )
+
+    assert app.discovery(clear=True) == {
+        "summary": {
+            "added": 0,
+            "skipped": 0,
+            "removedLiked": 0,
+            "cleared": 3,
+            "total": 0,
+        },
         "recommendations": [],
     }
 

@@ -5,6 +5,8 @@ import type {
   BackendCommand,
   BackendEnvelope,
   ConfigData,
+  DiscoveryData,
+  DiscoveryRequest,
   DashboardData,
   ListData,
   ListTracksRequest,
@@ -21,7 +23,8 @@ type BackendData =
   | ListData
   | MonthlyTopData
   | DashboardData
-  | RecommendationData;
+  | RecommendationData
+  | DiscoveryData;
 
 export interface BackendRuntimeEnv extends NodeJS.ProcessEnv {
   MUSIC_SYNC_BACKEND_COMMAND?: string;
@@ -79,7 +82,7 @@ function resolveCommandTokens(tokens: string[], cwd: string | undefined): string
 
 function buildRequestArgs(
   command: BackendCommand,
-  request?: ListTracksRequest | TopListenRequest | RecommendationRequest,
+  request?: ListTracksRequest | TopListenRequest | RecommendationRequest | DiscoveryRequest,
 ): string[] {
   if (command === "list") {
     const listRequest = request as ListTracksRequest | undefined;
@@ -105,6 +108,14 @@ function buildRequestArgs(
       return [];
     }
     return ["--archived"];
+  }
+
+  if (command === "discovery") {
+    const discoveryRequest = request as DiscoveryRequest | undefined;
+    if (!discoveryRequest?.clear) {
+      return [];
+    }
+    return ["--clear"];
   }
 
   return [];
@@ -206,7 +217,7 @@ export function buildBackendInvocation(
 export function normalizeBackendEnvelope(
   command: BackendCommand,
   result: BackendProcessResult,
-  request?: ListTracksRequest | TopListenRequest | RecommendationRequest,
+  request?: ListTracksRequest | TopListenRequest | RecommendationRequest | DiscoveryRequest,
 ): BackendEnvelope<BackendData> {
   const trimmed = result.stdout.trim();
   if (trimmed === "") {
@@ -306,7 +317,7 @@ function runProcess(invocation: BackendInvocation, env: BackendRuntimeEnv): Prom
 
 export async function runBackendCommand(
   command: BackendCommand,
-  request: ListTracksRequest | TopListenRequest | RecommendationRequest | undefined,
+  request: ListTracksRequest | TopListenRequest | RecommendationRequest | DiscoveryRequest | undefined,
   env: BackendRuntimeEnv,
   context: BackendRuntimeContext,
 ): Promise<BackendEnvelope<BackendData>> {

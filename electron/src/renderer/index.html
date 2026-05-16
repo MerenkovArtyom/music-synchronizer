@@ -25,6 +25,7 @@
           <a href="#dashboard-title">Dashboard</a>
           <a href="#list-title">Library</a>
           <a href="#monthly-top-title">Monthly Top</a>
+          <a href="#discovery-title">Discovery</a>
           <a href="#recommend-title">Recommendations</a>
         </nav>
         <button id="run-sync" class="button-primary topbar-cta" type="button">Run Sync</button>
@@ -232,6 +233,24 @@
               <ul id="least-played-results" class="results"></ul>
             </section>
           </div>
+        </section>
+
+        <section class="surface-card surface-card-wide" aria-labelledby="discovery-title">
+          <div class="panel-head">
+            <div>
+              <p class="micro-label">Discovery</p>
+              <h2 id="discovery-title">Discovery Recommendations</h2>
+            </div>
+            <div class="panel-actions">
+              <button id="discovery-load" class="button-primary" type="button">Load Discovery</button>
+              <button id="discovery-clear" class="button-muted" type="button">Clear</button>
+            </div>
+          </div>
+          <p class="panel-copy">
+            Fetch fresh network recommendations from Yandex Music and store them in `recommendations/`.
+          </p>
+          <div id="discovery-empty" class="empty-state">No discovery recommendations loaded yet.</div>
+          <ul id="discovery-results" class="results"></ul>
         </section>
 
         <section class="surface-card surface-card-wide" aria-labelledby="recommend-title">

@@ -92,3 +92,40 @@ def test_backend_cli_recommend_passes_archived_flag(
     payload = json.loads(capsys.readouterr().out)
     assert payload["command"] == "recommend"
     assert payload["data"]["includeArchived"] is True
+
+
+def test_backend_cli_discovery_passes_clear_flag(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setenv("YANDEX_MUSIC_TOKEN", "token")
+    monkeypatch.setenv("OBSIDIAN_VAULT_PATH", str(tmp_path))
+
+    class FakeApp:
+        def run_command(self, command: str, **kwargs: object) -> dict[str, object]:
+            assert command == "discovery"
+            assert kwargs == {"clear": True}
+            return {
+                "ok": True,
+                "command": "discovery",
+                "data": {
+                    "summary": {
+                        "added": 0,
+                        "skipped": 0,
+                        "removedLiked": 0,
+                        "cleared": 2,
+                        "total": 0,
+                    },
+                    "recommendations": [],
+                },
+            }
+
+    monkeypatch.setattr("music_synchronizer.backend_cli.MusicSyncApp", FakeApp)
+
+    exit_code = main(["discovery", "--clear"])
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["command"] == "discovery"
+    assert payload["data"]["summary"]["cleared"] == 2

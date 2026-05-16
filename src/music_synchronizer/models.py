@@ -21,6 +21,25 @@ class TrackInfo:
 
 
 @dataclass(frozen=True, slots=True)
+class DiscoveryTrackInfo:
+    track_id: str
+    title: str
+    artists: list[str]
+    album: str
+    system_tags: list[str]
+    year: int | None
+    cover_url: str
+    duration_seconds: int
+    yandex_url: str
+    monthly_listens: int | None = None
+    discovery_sources: list[str] = field(default_factory=list)
+
+    @property
+    def explain(self) -> str:
+        return ", ".join(self.discovery_sources)
+
+
+@dataclass(frozen=True, slots=True)
 class SavedTrackInfo:
     track_id: str | None
     title: str
@@ -38,6 +57,15 @@ class SyncSummary:
     added: int
     unchanged: int
     removed: int
+
+
+@dataclass(frozen=True, slots=True)
+class DiscoverySummary:
+    added: int
+    skipped: int
+    removed_liked: int
+    cleared: int
+    total: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -105,4 +133,5 @@ class DashboardData:
     longest_track: TrackDashboardEntry | None
     top_tags: list[DashboardStatEntry]
     top_artists: list[DashboardStatEntry]
+    discovery_recommendations: list[DiscoveryTrackInfo] = field(default_factory=list)
     relisten_recommendations: list[RelistenRecommendationEntry] = field(default_factory=list)

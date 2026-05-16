@@ -161,3 +161,12 @@
 - `dashboard.md` теперь включает нижний блок `Re-listen Recommendations`.
 - Electron UI получил новый блок рекомендаций после `Monthly Top` и переключатель для включения архивных треков.
 - README, Electron README и тесты обновлены под новый пользовательский сценарий.
+
+### Commit 25: add Yandex discovery recommendations
+
+- Добавлен новый сетевой поток `discovery`, который строит рекомендации из Yandex Music по последним прослушанным лайкнутым трекам.
+- Discovery смешивает два источника: популярные треки артистов сидов и `tracks_similar`, исключая уже лайкнутые треки и дубликаты.
+- В vault появилась новая папка `recommendations/`, а `sync` теперь автоматически удаляет из неё треки, которые пользователь уже лайкнул.
+- Python CLI и shared desktop backend получили новую команду `discovery` и режим очистки `discovery --clear`.
+- `dashboard.md` и Electron UI получили отдельный блок `Discovery Recommendations` между `Monthly Top` и локальными `Re-listen Recommendations`.
+- README и тесты обновлены под новый формат рекомендаций и поведение очистки.

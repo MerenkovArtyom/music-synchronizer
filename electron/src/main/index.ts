@@ -2,7 +2,7 @@ import path from "node:path";
 
 import { app, BrowserWindow, ipcMain } from "electron";
 
-import type { ListTracksRequest, RecommendationRequest, TopListenRequest } from "../shared/contracts.js";
+import type { DiscoveryRequest, ListTracksRequest, RecommendationRequest, TopListenRequest } from "../shared/contracts.js";
 import { runBackendCommand } from "./backend.js";
 
 const runtimeEnv = {
@@ -67,6 +67,13 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle("music-sync:recommend", async (_event, request: RecommendationRequest) => {
     return await runBackendCommand("recommend", request, runtimeEnv, {
+      isPackaged: app.isPackaged,
+      appPath: app.getAppPath(),
+    });
+  });
+
+  ipcMain.handle("music-sync:discovery", async (_event, request: DiscoveryRequest) => {
+    return await runBackendCommand("discovery", request, runtimeEnv, {
       isPackaged: app.isPackaged,
       appPath: app.getAppPath(),
     });

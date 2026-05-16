@@ -29,6 +29,7 @@ uv run music-sync-app show-config
 - Поиск уже сохранённых активных треков через `list --tag` и `list --artist`.
 - Локальный dashboard-файл `dashboard.md` с агрегатами по активным и архивным заметкам.
 - Локальные рекомендации, какие лайкнутые треки стоит переслушать, на основе недавних артистов, жанров и тегов.
+- Сетевые discovery-рекомендации из Yandex Music в `recommendations/*.md`.
 - Разрешение конфликтов имён файлов по схеме:
   - `title`;
   - `title - artist`;
@@ -90,6 +91,8 @@ uv run music-sync sync
 uv run music-sync dashboard
 uv run music-sync top-listen --most
 uv run music-sync top-listen --least
+uv run music-sync discovery
+uv run music-sync discovery --clear
 uv run music-sync recommend
 uv run music-sync recommend --archived
 uv run music-sync list --tag "rock"
@@ -107,6 +110,8 @@ uv run music-sync-app show-config
 - `uv run music-sync top-listen --least` — показывает top 10 локально сохранённых треков с самым маленьким `monthly_listens`.
 - `uv run music-sync recommend` — рекомендует похожие лайкнутые треки, которые давно не слушались.
 - `uv run music-sync recommend --archived` — то же самое, но дополнительно включает архив `tracks/_removed/`.
+- `uv run music-sync discovery` — получает новые сетевые рекомендации из Yandex Music и сохраняет их в `recommendations/`.
+- `uv run music-sync discovery --clear` — очищает папку `recommendations/`.
 - `uv run music-sync list --tag "rock"` — ищет активные сохранённые треки по тегу.
 - `uv run music-sync list --artist "Artist Name"` — ищет активные сохранённые треки по артисту.
 - `uv run music-sync-app ...` — machine-readable backend entrypoint для desktop app; печатает JSON envelope вместо человекочитаемого текста.
@@ -144,6 +149,19 @@ uv run music-sync-app show-config
 - рекомендация требует хотя бы одного совпадения по артисту, жанру или пользовательскому тегу;
 - в выдаче не больше 10 треков.
 
+Особенности команды `discovery`:
+
+- команда использует Yandex Music API, а не только локальные заметки;
+- за основу берутся последние прослушанные лайкнутые треки из `music_history`;
+- рекомендации смешиваются из двух источников:
+  - популярные треки артистов сидов;
+  - `tracks_similar` для самих сидов;
+- лайкнутые треки и дубликаты по `track_id` исключаются;
+- новые заметки пишутся в `recommendations/` в корне vault;
+- команда работает накопительно и не пересобирает папку целиком;
+- `sync` автоматически удаляет из `recommendations/` те треки, которые пользователь уже лайкнул;
+- `--clear` полностью очищает `recommendations/`.
+
 ## Как устроена синхронизация
 
 При запуске `sync` проект:
@@ -152,8 +170,9 @@ uv run music-sync-app show-config
 2. пытается посчитать количество прослушиваний за последние 30 дней;
 3. создаёт или обновляет заметки в Obsidian;
 4. переносит исчезнувшие из лайков треки в архив;
-5. обновляет локальный `dashboard.md`;
-6. сохраняет служебный снапшот в `.music_sync_snapshot.json`.
+5. удаляет из `recommendations/` треки, которые теперь есть в лайках;
+6. обновляет локальный `dashboard.md`;
+7. сохраняет служебный снапшот в `.music_sync_snapshot.json`.
 
 Синхронизация ориентируется на `track_id`, а не на имя файла. Это важно: заметка может быть переименована при изменении названия трека или разрешении коллизии, но связь с треком остаётся стабильной.
 
@@ -166,6 +185,10 @@ uv run music-sync-app show-config
 Архив:
 
 - `tracks/_removed/<имя файла>.md`
+
+Discovery recommendations:
+
+- `recommendations/<имя файла>.md`
 
 Служебный файл:
 

@@ -1,6 +1,8 @@
 import type {
   BackendEnvelope,
   ConfigData,
+  DiscoveryData,
+  DiscoveryRequest,
   DashboardData,
   ListData,
   ListTracksRequest,
@@ -18,4 +20,5 @@ export interface MusicSyncBridge {
   getTopListen: (request: TopListenRequest) => Promise<BackendEnvelope<MonthlyTopData>>;
   getDashboard: () => Promise<BackendEnvelope<DashboardData>>;
   getRecommendations: (request: RecommendationRequest) => Promise<BackendEnvelope<RecommendationData>>;
+  getDiscoveryRecommendations: (request: DiscoveryRequest) => Promise<BackendEnvelope<DiscoveryData>>;
 }

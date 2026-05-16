@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from pathlib import Path
 
-from music_synchronizer.models import TrackInfo
+from music_synchronizer.models import DiscoveryTrackInfo, TrackInfo
 from music_synchronizer.obsidian import ObsidianExporter
 
 
@@ -18,6 +18,28 @@ def _track(track_id: str, position: int, title: str = "Song", monthly_listens: i
         source_position=position,
         yandex_url=f"https://music.yandex.ru/track/{track_id}",
         monthly_listens=monthly_listens,
+    )
+
+
+def _discovery_track(
+    track_id: str,
+    title: str,
+    *,
+    sources: list[str] | None = None,
+    monthly_listens: int | None = None,
+) -> DiscoveryTrackInfo:
+    return DiscoveryTrackInfo(
+        track_id=track_id,
+        title=title,
+        artists=["Artist"],
+        album="Album",
+        system_tags=["indie"],
+        year=2024,
+        cover_url="https://avatars.yandex.net/get-music-content/cover.jpg",
+        duration_seconds=180,
+        yandex_url=f"https://music.yandex.ru/track/{track_id}",
+        monthly_listens=monthly_listens,
+        discovery_sources=sources or ["artist-popular"],
     )
 
 
@@ -48,6 +70,72 @@ def test_export_writes_playlist_and_track_notes(tmp_path: Path) -> None:
     assert summary.added == 2
     assert summary.unchanged == 0
     assert summary.removed == 0
+
+
+def test_export_writes_discovery_notes_to_recommendations(tmp_path: Path) -> None:
+    exporter = ObsidianExporter(tmp_path)
+
+    summary = exporter.save_discovery_tracks([
+        _discovery_track("201", "Discovery Song", sources=["artist-popular", "similar"], monthly_listens=4)
+    ])
+
+    note_path = tmp_path / "recommendations" / "Discovery Song.md"
+    note = note_path.read_text(encoding="utf-8")
+
+    assert note_path.exists()
+    assert 'track_id: "201"' in note
+    assert 'source: "discovery"' in note
+    assert 'discovery_sources: ["artist-popular", "similar"]' in note
+    assert "Monthly listens (30d): 4" in note
+    assert summary.added == 1
+    assert summary.total == 1
+
+
+def test_clear_discovery_tracks_only_removes_recommendations(tmp_path: Path) -> None:
+    exporter = ObsidianExporter(tmp_path)
+    synced_at = datetime(2026, 4, 24, 12, 0, tzinfo=timezone.utc)
+
+    exporter.sync([_track("101", 1, "Liked")], synced_at=synced_at)
+    exporter.save_discovery_tracks([
+        _discovery_track("201", "Discovery Song"),
+        _discovery_track("202", "Another Discovery"),
+    ])
+
+    summary = exporter.clear_discovery_tracks()
+
+    assert summary.cleared == 2
+    assert (tmp_path / "tracks" / "Liked.md").exists()
+    assert not (tmp_path / "recommendations" / "Discovery Song.md").exists()
+    assert not (tmp_path / "recommendations" / "Another Discovery.md").exists()
+
+
+def test_remove_discovery_tracks_by_ids_removes_only_matching_notes(tmp_path: Path) -> None:
+    exporter = ObsidianExporter(tmp_path)
+    exporter.save_discovery_tracks([
+        _discovery_track("201", "Discovery Song"),
+        _discovery_track("202", "Another Discovery"),
+    ])
+
+    removed = exporter.remove_discovery_tracks_by_ids({"201"})
+
+    assert removed == 1
+    assert not (tmp_path / "recommendations" / "Discovery Song.md").exists()
+    assert (tmp_path / "recommendations" / "Another Discovery.md").exists()
+
+
+def test_dashboard_renders_discovery_recommendations_before_relisten_block(tmp_path: Path) -> None:
+    exporter = ObsidianExporter(tmp_path)
+    synced_at = datetime(2026, 4, 24, 12, 0, tzinfo=timezone.utc)
+
+    exporter.sync([_track("101", 1, "Liked", monthly_listens=3)], synced_at=synced_at)
+    exporter.save_discovery_tracks([_discovery_track("201", "Discovery Song", sources=["similar"])])
+    dashboard = (tmp_path / "dashboard.md").read_text(encoding="utf-8")
+
+    discovery_index = dashboard.index("## Discovery Recommendations")
+    relisten_index = dashboard.index("## Re-listen Recommendations")
+
+    assert discovery_index < relisten_index
+    assert "1. Discovery Song - Artist (similar)" in dashboard
 
 
 def test_export_moves_removed_tracks_to_archive(tmp_path: Path) -> None:

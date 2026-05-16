@@ -7,6 +7,8 @@ from music_synchronizer.config import Settings
 from music_synchronizer.models import (
     DashboardData,
     DashboardStatEntry,
+    DiscoverySummary,
+    DiscoveryTrackInfo,
     MonthlyTopEntry,
     RelistenRecommendationEntry,
     SavedTrackInfo,
@@ -14,7 +16,7 @@ from music_synchronizer.models import (
 )
 from music_synchronizer.sync import SyncService
 
-BackendCommand = Literal["show-config", "sync", "dashboard", "list", "top-listen", "recommend"]
+BackendCommand = Literal["show-config", "sync", "dashboard", "list", "top-listen", "recommend", "discovery"]
 TopListenMode = Literal["most", "least"]
 ListFilterKind = Literal["tag", "artist"]
 
@@ -93,6 +95,33 @@ def _recommendation_entry_payload(entry: RelistenRecommendationEntry) -> dict[st
     }
 
 
+def _discovery_summary_payload(summary: DiscoverySummary) -> dict[str, Any]:
+    return {
+        "added": summary.added,
+        "skipped": summary.skipped,
+        "removedLiked": summary.removed_liked,
+        "cleared": summary.cleared,
+        "total": summary.total,
+    }
+
+
+def _discovery_track_payload(entry: DiscoveryTrackInfo) -> dict[str, Any]:
+    return {
+        "trackId": entry.track_id,
+        "title": entry.title,
+        "artists": entry.artists,
+        "album": entry.album,
+        "systemTags": entry.system_tags,
+        "year": entry.year,
+        "coverUrl": entry.cover_url,
+        "durationSeconds": entry.duration_seconds,
+        "yandexUrl": entry.yandex_url,
+        "monthlyListens": entry.monthly_listens,
+        "discoverySources": entry.discovery_sources,
+        "explain": entry.explain,
+    }
+
+
 class MusicSyncApp:
     def __init__(self, settings: Settings | None = None) -> None:
         self.settings = settings or Settings()
@@ -162,6 +191,20 @@ class MusicSyncApp:
             "recommendations": [_recommendation_entry_payload(entry) for entry in entries],
         }
 
+    def discovery(self, *, clear: bool) -> dict[str, Any]:
+        if clear:
+            summary = self.service.clear_discovery_recommendations()
+            return {
+                "summary": _discovery_summary_payload(summary),
+                "recommendations": [],
+            }
+
+        entries, summary = self.service.discovery_recommendations()
+        return {
+            "summary": _discovery_summary_payload(summary),
+            "recommendations": [_discovery_track_payload(entry) for entry in entries],
+        }
+
     def run_command(self, command: BackendCommand, **kwargs: Any) -> dict[str, Any]:
         try:
             data = self._dispatch(command, **kwargs)
@@ -193,6 +236,8 @@ class MusicSyncApp:
             return self.list_tracks(kind=kwargs["kind"], value=kwargs["value"])
         if command == "recommend":
             return self.recommend(include_archived=kwargs["include_archived"])
+        if command == "discovery":
+            return self.discovery(clear=kwargs["clear"])
         return self.top_listen(mode=kwargs["mode"])
 
     def _dashboard_summary_payload(self, dashboard: DashboardData) -> dict[str, Any]:
@@ -237,4 +282,6 @@ def _error_code(command: BackendCommand) -> str:
         return "LIST_FAILED"
     if command == "recommend":
         return "RECOMMEND_FAILED"
+    if command == "discovery":
+        return "DISCOVERY_FAILED"
     return "TOP_LISTEN_FAILED"

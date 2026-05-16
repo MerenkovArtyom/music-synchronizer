@@ -1,4 +1,4 @@
-export type BackendCommand = "show-config" | "sync" | "list" | "top-listen" | "dashboard" | "recommend";
+export type BackendCommand = "show-config" | "sync" | "list" | "top-listen" | "dashboard" | "recommend" | "discovery";
 export type FilterKind = "tag" | "artist";
 export type TopListenMode = "most" | "least";
 
@@ -91,6 +91,10 @@ export interface RecommendationRequest {
   archived: boolean;
 }
 
+export interface DiscoveryRequest {
+  clear: boolean;
+}
+
 export interface RecommendationData {
   includeArchived: boolean;
   recommendations: Array<{
@@ -103,6 +107,30 @@ export interface RecommendationData {
     matchedGenres: string[];
     matchedUserTags: string[];
     score: number;
+    explain: string;
+  }>;
+}
+
+export interface DiscoveryData {
+  summary: {
+    added: number;
+    skipped: number;
+    removedLiked: number;
+    cleared: number;
+    total: number;
+  };
+  recommendations: Array<{
+    trackId: string;
+    title: string;
+    artists: string[];
+    album: string;
+    systemTags: string[];
+    year: number | null;
+    coverUrl: string;
+    durationSeconds: number;
+    yandexUrl: string;
+    monthlyListens: number | null;
+    discoverySources: string[];
     explain: string;
   }>;
 }
@@ -145,4 +173,5 @@ export interface RendererApi {
   getTopListen: (request: TopListenRequest) => Promise<BackendEnvelope<MonthlyTopData>>;
   getDashboard: () => Promise<BackendEnvelope<DashboardData>>;
   getRecommendations: (request: RecommendationRequest) => Promise<BackendEnvelope<RecommendationData>>;
+  getDiscoveryRecommendations: (request: DiscoveryRequest) => Promise<BackendEnvelope<DiscoveryData>>;
 }

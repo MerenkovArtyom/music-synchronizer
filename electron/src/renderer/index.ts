@@ -1,6 +1,8 @@
 import type {
   BackendEnvelope,
   ConfigData,
+  DiscoveryData,
+  DiscoveryRequest,
   DashboardData,
   FilterKind,
   ListData,
@@ -20,6 +22,10 @@ const dashboardButton = document.querySelector<HTMLButtonElement>("#dashboard-lo
 const dashboardInlineButton = document.querySelector<HTMLButtonElement>("#dashboard-load-inline");
 const listSubmitButton = document.querySelector<HTMLButtonElement>("#list-submit");
 const monthlyTopButton = document.querySelector<HTMLButtonElement>("#monthly-top-load");
+const discoveryLoadButton = document.querySelector<HTMLButtonElement>("#discovery-load");
+const discoveryClearButton = document.querySelector<HTMLButtonElement>("#discovery-clear");
+const discoveryEmpty = document.querySelector<HTMLElement>("#discovery-empty");
+const discoveryResults = document.querySelector<HTMLUListElement>("#discovery-results");
 const configDetails = document.querySelector<HTMLElement>("#config-details");
 const syncSummary = document.querySelector<HTMLElement>("#sync-summary");
 const dashboardEmpty = document.querySelector<HTMLElement>("#dashboard-empty");
@@ -75,6 +81,12 @@ function setBusy(isBusy: boolean): void {
   }
   if (recommendButton) {
     recommendButton.disabled = isBusy;
+  }
+  if (discoveryLoadButton) {
+    discoveryLoadButton.disabled = isBusy;
+  }
+  if (discoveryClearButton) {
+    discoveryClearButton.disabled = isBusy;
   }
 }
 
@@ -284,6 +296,34 @@ function renderRecommendations(data: RecommendationData): void {
   }
 }
 
+function renderDiscovery(data: DiscoveryData, cleared: boolean): void {
+  if (!discoveryResults || !discoveryEmpty) {
+    return;
+  }
+
+  discoveryResults.innerHTML = "";
+  if (cleared) {
+    discoveryEmpty.textContent = `Cleared ${data.summary.cleared} recommendation(s).`;
+    return;
+  }
+
+  if (data.recommendations.length === 0) {
+    discoveryEmpty.textContent = "No discovery recommendations found for the current taste profile.";
+    return;
+  }
+
+  discoveryEmpty.textContent = `Loaded ${data.recommendations.length} discovery recommendation(s).`;
+  for (const entry of data.recommendations) {
+    const item = document.createElement("li");
+    item.innerHTML = `
+      <span class="track-title">${escapeHtml(entry.title)}</span>
+      <span class="track-artists">${escapeHtml(entry.artists.join(", ") || "Unknown Artist")}</span>
+      <span class="track-meta">${escapeHtml(`Monthly listens: ${entry.monthlyListens === null ? "-" : entry.monthlyListens} | Sources: ${entry.explain}`)}</span>
+    `;
+    discoveryResults.appendChild(item);
+  }
+}
+
 function errorSummary<T>(result: BackendEnvelope<T>): string {
   if (result.ok) {
     return "Unexpected success result.";
@@ -455,6 +495,41 @@ async function loadRecommendations(): Promise<void> {
   setBusy(false);
 }
 
+async function loadDiscovery(clear: boolean): Promise<void> {
+  const request: DiscoveryRequest = { clear };
+
+  setBusy(true);
+  updateStatus(
+    "busy",
+    clear ? "Clearing" : "Discovery",
+    clear
+      ? "Clearing saved discovery recommendations from the Python backend."
+      : "Loading discovery recommendations from the Python backend.",
+  );
+
+  const result = await window.musicSync.getDiscoveryRecommendations(request);
+  if (result.ok) {
+    renderDiscovery(result.data, clear);
+    updateStatus(
+      "success",
+      clear ? "Cleared" : "Discovery",
+      clear
+        ? "Discovery recommendations cleared."
+        : "Discovery recommendations loaded from the Python backend.",
+    );
+  } else {
+    if (discoveryEmpty) {
+      discoveryEmpty.textContent = clear ? "Discovery clear request failed." : "Discovery request failed.";
+    }
+    if (discoveryResults) {
+      discoveryResults.innerHTML = "";
+    }
+    updateStatus("error", "Discovery Error", errorSummary(result));
+  }
+
+  setBusy(false);
+}
+
 refreshConfigButton?.addEventListener("click", () => {
   void loadConfig();
 });
@@ -481,6 +556,14 @@ monthlyTopButton?.addEventListener("click", () => {
 
 recommendButton?.addEventListener("click", () => {
   void loadRecommendations();
+});
+
+discoveryLoadButton?.addEventListener("click", () => {
+  void loadDiscovery(false);
+});
+
+discoveryClearButton?.addEventListener("click", () => {
+  void loadDiscovery(true);
 });
 
 void loadConfig();

@@ -11,6 +11,8 @@ from statistics import mean, median
 from music_synchronizer.models import (
     DashboardData,
     DashboardStatEntry,
+    DiscoverySummary,
+    DiscoveryTrackInfo,
     RelistenRecommendationEntry,
     SavedTrackInfo,
     SyncSummary,
@@ -36,6 +38,7 @@ class TrackSnapshot:
 class ObsidianExporter:
     def __init__(self, vault_path: Path) -> None:
         self.vault_path = vault_path
+        self.recommendations_dir = vault_path / "recommendations"
         self.tracks_dir = vault_path / "tracks"
         self.removed_dir = self.tracks_dir / "_removed"
         self.snapshot_path = vault_path / ".music_sync_snapshot.json"
@@ -43,6 +46,7 @@ class ObsidianExporter:
 
     def sync(self, tracks: list[TrackInfo], synced_at: datetime) -> SyncSummary:
         self.vault_path.mkdir(parents=True, exist_ok=True)
+        self.recommendations_dir.mkdir(parents=True, exist_ok=True)
         self.tracks_dir.mkdir(parents=True, exist_ok=True)
         self.removed_dir.mkdir(parents=True, exist_ok=True)
         self._remove_legacy_playlist()
@@ -170,6 +174,7 @@ class ObsidianExporter:
     def dashboard_data(self) -> DashboardData:
         active_tracks = self._read_saved_tracks(self.tracks_dir)
         removed_tracks = self._read_saved_tracks(self.removed_dir)
+        discovery_tracks = self.read_discovery_tracks()
         monthly_listens_values = [
             track.monthly_listens for track in active_tracks if track.monthly_listens is not None
         ]
@@ -199,6 +204,7 @@ class ObsidianExporter:
             longest_track=longest_track,
             top_tags=top_tags,
             top_artists=top_artists,
+            discovery_recommendations=discovery_tracks,
             relisten_recommendations=self._build_dashboard_recommendations(active_tracks),
         )
 
@@ -207,6 +213,74 @@ class ObsidianExporter:
         dashboard = self.dashboard_data()
         self.dashboard_path.write_text(self._render_dashboard(dashboard), encoding="utf-8")
         return dashboard
+
+    def read_discovery_tracks(self) -> list[DiscoveryTrackInfo]:
+        tracks: list[DiscoveryTrackInfo] = []
+        if not self.recommendations_dir.exists():
+            return tracks
+
+        for path in sorted(self.recommendations_dir.glob("*.md")):
+            track = self._read_discovery_track(path)
+            if track is not None:
+                tracks.append(track)
+        return tracks
+
+    def save_discovery_tracks(self, tracks: list[DiscoveryTrackInfo]) -> DiscoverySummary:
+        self.vault_path.mkdir(parents=True, exist_ok=True)
+        self.recommendations_dir.mkdir(parents=True, exist_ok=True)
+
+        managed_files = self._scan_discovery_files()
+        existing_track_ids = set(managed_files)
+        unmanaged_names = {
+            path.name for path in self.recommendations_dir.glob("*.md") if path not in managed_files.values()
+        }
+        desired_paths = self._build_discovery_paths(tracks, unmanaged_names, managed_files)
+
+        for track in tracks:
+            desired_paths[track.track_id].write_text(self._render_discovery_track(track), encoding="utf-8")
+
+        total = len(list(self.recommendations_dir.glob("*.md")))
+        added = sum(1 for track in tracks if track.track_id not in existing_track_ids)
+        skipped = len(tracks) - added
+        self.refresh_dashboard()
+        return DiscoverySummary(
+            added=added,
+            skipped=skipped,
+            removed_liked=0,
+            cleared=0,
+            total=total,
+        )
+
+    def remove_discovery_tracks_by_ids(self, track_ids: set[str]) -> int:
+        if not track_ids or not self.recommendations_dir.exists():
+            return 0
+
+        removed = 0
+        for path in self.recommendations_dir.glob("*.md"):
+            track_id = self._read_track_id(path)
+            if track_id is None or track_id not in track_ids:
+                continue
+            path.unlink()
+            removed += 1
+
+        if removed > 0:
+            self.refresh_dashboard()
+        return removed
+
+    def clear_discovery_tracks(self) -> DiscoverySummary:
+        cleared = 0
+        if self.recommendations_dir.exists():
+            for path in self.recommendations_dir.glob("*.md"):
+                path.unlink()
+                cleared += 1
+        self.refresh_dashboard()
+        return DiscoverySummary(
+            added=0,
+            skipped=0,
+            removed_liked=0,
+            cleared=cleared,
+            total=0,
+        )
 
     def _render_track(self, track: TrackInfo, synced_at: datetime, user_tags: list[str]) -> str:
         artists = ", ".join(track.artists) if track.artists else "Unknown Artist"
@@ -291,6 +365,27 @@ class ObsidianExporter:
                     managed[track_id] = path
         return managed
 
+    def _build_discovery_paths(
+        self,
+        tracks: list[DiscoveryTrackInfo],
+        reserved_names: set[str],
+        managed_files: dict[str, Path],
+    ) -> dict[str, Path]:
+        desired_paths: dict[str, Path] = {}
+        used_names = set(reserved_names)
+
+        for track in tracks:
+            current_path = managed_files.get(track.track_id)
+            if current_path is not None:
+                desired_paths[track.track_id] = current_path
+                used_names.add(current_path.name)
+                continue
+            filename = self._unique_filename(track, used_names)
+            used_names.add(filename)
+            desired_paths[track.track_id] = self.recommendations_dir / filename
+
+        return desired_paths
+
     def _build_desired_paths(
         self,
         tracks: list[TrackInfo],
@@ -306,7 +401,7 @@ class ObsidianExporter:
 
         return desired_paths
 
-    def _unique_filename(self, track: TrackInfo, used_names: set[str]) -> str:
+    def _unique_filename(self, track: TrackInfo | DiscoveryTrackInfo, used_names: set[str]) -> str:
         candidates = [
             self._format_filename(track.title),
             self._format_filename(f"{track.title} - {self._primary_artist(track)}"),
@@ -326,7 +421,7 @@ class ObsidianExporter:
             sanitized = "untitled"
         return f"{sanitized}.md"
 
-    def _primary_artist(self, track: TrackInfo) -> str:
+    def _primary_artist(self, track: TrackInfo | DiscoveryTrackInfo) -> str:
         return track.artists[0] if track.artists else track.track_id
 
     def _read_track_id(self, path: Path) -> str | None:
@@ -377,6 +472,37 @@ class ObsidianExporter:
             duration_seconds=duration_seconds,
             monthly_listens=monthly_listens,
             source_position=source_position,
+        )
+
+    def _scan_discovery_files(self) -> dict[str, Path]:
+        managed: dict[str, Path] = {}
+        if not self.recommendations_dir.exists():
+            return managed
+        for path in self.recommendations_dir.glob("*.md"):
+            track_id = self._read_track_id(path)
+            if track_id is not None:
+                managed[track_id] = path
+        return managed
+
+    def _read_discovery_track(self, path: Path) -> DiscoveryTrackInfo | None:
+        content = path.read_text(encoding="utf-8")
+        track_id = self._read_frontmatter_value(content, "track_id")
+        title = self._read_frontmatter_value(content, "title")
+        if track_id is None or title is None:
+            return None
+
+        return DiscoveryTrackInfo(
+            track_id=track_id,
+            title=title,
+            artists=self._read_frontmatter_list(content, "artists"),
+            album=self._read_frontmatter_value(content, "album") or "",
+            system_tags=self._read_frontmatter_list(content, "system_tags"),
+            year=self._read_optional_frontmatter_int(content, "year"),
+            cover_url=self._read_frontmatter_value(content, "cover_url") or "",
+            duration_seconds=self._read_optional_frontmatter_int(content, "duration_seconds") or 0,
+            yandex_url=self._read_frontmatter_value(content, "yandex_url") or "",
+            monthly_listens=self._read_optional_frontmatter_int(content, "monthly_listens"),
+            discovery_sources=self._read_frontmatter_list(content, "discovery_sources"),
         )
 
     def _read_frontmatter_value(self, content: str, field_name: str) -> str | None:
@@ -482,6 +608,51 @@ class ObsidianExporter:
             source_position=track.source_position,
             yandex_url=track.yandex_url,
         )
+
+    def _render_discovery_track(self, track: DiscoveryTrackInfo) -> str:
+        artists = ", ".join(track.artists) if track.artists else "Unknown Artist"
+        system_tags = self._normalize_tags(track.system_tags)
+        year_value = str(track.year) if track.year is not None else "null"
+        monthly_listens_value = (
+            str(track.monthly_listens) if track.monthly_listens is not None else "null"
+        )
+        monthly_listens_text = str(track.monthly_listens) if track.monthly_listens is not None else "-"
+        duration_text = self._format_duration(track.duration_seconds)
+        lines = [
+            "---",
+            f'track_id: "{self._escape_yaml(track.track_id)}"',
+            f'title: "{self._escape_yaml(track.title)}"',
+            f"artists: [{', '.join(self._quote_yaml(artist) for artist in track.artists)}]",
+            f'album: "{self._escape_yaml(track.album)}"',
+            f"system_tags: [{', '.join(self._quote_yaml(tag) for tag in system_tags)}]",
+            f"discovery_sources: [{', '.join(self._quote_yaml(source) for source in track.discovery_sources)}]",
+            f"year: {year_value}",
+            f"monthly_listens: {monthly_listens_value}",
+            f'cover_url: "{self._escape_yaml(track.cover_url)}"',
+            f"duration_seconds: {track.duration_seconds}",
+            'source: "discovery"',
+            f'yandex_url: "{self._escape_yaml(track.yandex_url)}"',
+            "---",
+            "",
+            f"# {track.title}",
+            "",
+            f"Artists: {artists}",
+            f"Album: {track.album or '-'}",
+            f"Year: {track.year if track.year is not None else '-'}",
+            f"Monthly listens (30d): {monthly_listens_text}",
+            f"Duration: {duration_text}",
+            f"Yandex Music: {track.yandex_url}",
+            f"Discovery sources: {track.explain or '-'}",
+            "",
+        ]
+        if track.cover_url:
+            lines.extend(
+                [
+                    f"![Album cover]({track.cover_url})",
+                    "",
+                ]
+            )
+        return "\n".join(lines)
 
     def _is_unchanged_track(
         self,
@@ -833,6 +1004,26 @@ class ObsidianExporter:
                 "",
                 "## Longest Track",
                 self._render_longest_track_summary(dashboard.longest_track),
+                "",
+                "## Discovery Recommendations",
+            ]
+        )
+        if dashboard.discovery_recommendations:
+            lines.extend(
+                [
+                    (
+                        f"{index}. {entry.title} - "
+                        f"{', '.join(entry.artists) if entry.artists else 'Unknown Artist'} "
+                        f"({entry.explain})"
+                    )
+                    for index, entry in enumerate(dashboard.discovery_recommendations, start=1)
+                ]
+            )
+        else:
+            lines.append("- None")
+
+        lines.extend(
+            [
                 "",
                 "## Re-listen Recommendations",
             ]

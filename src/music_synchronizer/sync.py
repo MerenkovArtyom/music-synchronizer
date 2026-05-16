@@ -5,6 +5,8 @@ from datetime import datetime, timezone
 from music_synchronizer.config import Settings
 from music_synchronizer.models import (
     DashboardData,
+    DiscoverySummary,
+    DiscoveryTrackInfo,
     MonthlyTopEntry,
     RelistenRecommendationEntry,
     SavedTrackInfo,
@@ -16,6 +18,8 @@ from music_synchronizer.yandex_client import YandexMusicClient
 MONTHLY_TOP_LIMIT = 10
 RECENT_PROFILE_LIMIT = 20
 RECOMMENDATION_LIMIT = 10
+DISCOVERY_SEED_LIMIT = 8
+DISCOVERY_LIMIT = 20
 
 
 class SyncService:
@@ -27,7 +31,10 @@ class SyncService:
     def run(self) -> SyncSummary:
         synced_at = datetime.now(timezone.utc)
         tracks = self.client.fetch_liked_tracks(reference_time=synced_at)
-        return self.exporter.sync(tracks, synced_at=synced_at)
+        summary = self.exporter.sync(tracks, synced_at=synced_at)
+        liked_track_ids = {track.track_id for track in tracks}
+        self.exporter.remove_discovery_tracks_by_ids(liked_track_ids)
+        return summary
 
     def dashboard_data(self) -> DashboardData:
         return self.exporter.dashboard_data()
@@ -42,6 +49,31 @@ class SyncService:
     def relisten_recommendations(self, *, include_archived: bool) -> list[RelistenRecommendationEntry]:
         tracks = self.exporter.recommendation_tracks(include_archived=include_archived)
         return self._build_relisten_recommendations(tracks, include_archived=include_archived)
+
+    def discovery_recommendations(self) -> tuple[list[DiscoveryTrackInfo], DiscoverySummary]:
+        reference_time = datetime.now(timezone.utc)
+        liked_tracks = self.client.fetch_liked_tracks(reference_time=reference_time)
+        liked_track_ids = {track.track_id for track in liked_tracks}
+        seed_track_ids = self.client.fetch_recent_liked_track_ids(
+            liked_track_ids=liked_track_ids,
+            reference_time=reference_time,
+            limit=DISCOVERY_SEED_LIMIT,
+        )
+        if not seed_track_ids:
+            summary = DiscoverySummary(added=0, skipped=0, removed_liked=0, cleared=0, total=len(self.exporter.read_discovery_tracks()))
+            return [], summary
+
+        existing_tracks = self.exporter.read_discovery_tracks()
+        existing_track_ids = {track.track_id for track in existing_tracks}
+        exclude_track_ids = liked_track_ids | existing_track_ids
+        popular_candidates = self.client.fetch_popular_tracks_for_artist_seeds(seed_track_ids, exclude_track_ids)
+        similar_candidates = self.client.fetch_similar_tracks(seed_track_ids, exclude_track_ids)
+        recommendations = self._mix_discovery_candidates(popular_candidates, similar_candidates)
+        summary = self.exporter.save_discovery_tracks(recommendations)
+        return recommendations, summary
+
+    def clear_discovery_recommendations(self) -> DiscoverySummary:
+        return self.exporter.clear_discovery_tracks()
 
     def _build_top_listen_entries(
         self,
@@ -185,3 +217,99 @@ class SyncService:
         if monthly_listens <= 3:
             return 2
         return 0
+
+    def _mix_discovery_candidates(
+        self,
+        popular_candidates: list[DiscoveryTrackInfo],
+        similar_candidates: list[DiscoveryTrackInfo],
+    ) -> list[DiscoveryTrackInfo]:
+        target_per_source = DISCOVERY_LIMIT // 2
+        merged_candidates: dict[str, DiscoveryTrackInfo] = {}
+        ordered_ids: list[str] = []
+
+        def add_candidate(track: DiscoveryTrackInfo) -> bool:
+            existing = merged_candidates.get(track.track_id)
+            if existing is None:
+                merged_candidates[track.track_id] = track
+                ordered_ids.append(track.track_id)
+                return True
+
+            merged_sources = list(existing.discovery_sources)
+            for source in track.discovery_sources:
+                if source not in merged_sources:
+                    merged_sources.append(source)
+            merged_candidates[track.track_id] = DiscoveryTrackInfo(
+                track_id=existing.track_id,
+                title=existing.title,
+                artists=existing.artists,
+                album=existing.album,
+                system_tags=existing.system_tags,
+                year=existing.year,
+                cover_url=existing.cover_url,
+                duration_seconds=existing.duration_seconds,
+                yandex_url=existing.yandex_url,
+                monthly_listens=existing.monthly_listens,
+                discovery_sources=merged_sources,
+            )
+            return False
+
+        selected_popular = popular_candidates[:target_per_source]
+        selected_similar = similar_candidates[:target_per_source]
+        popular_index = 0
+        similar_index = 0
+        popular_added = 0
+        similar_added = 0
+        prefer_popular = True
+
+        while (
+            len(ordered_ids) < DISCOVERY_LIMIT
+            and (
+                (popular_added < target_per_source and popular_index < len(selected_popular))
+                or (similar_added < target_per_source and similar_index < len(selected_similar))
+            )
+        ):
+            added = False
+            if prefer_popular and popular_added < target_per_source and popular_index < len(selected_popular):
+                if add_candidate(selected_popular[popular_index]):
+                    popular_added += 1
+                    added = True
+                popular_index += 1
+            elif (not prefer_popular) and similar_added < target_per_source and similar_index < len(selected_similar):
+                if add_candidate(selected_similar[similar_index]):
+                    similar_added += 1
+                    added = True
+                similar_index += 1
+            elif popular_added < target_per_source and popular_index < len(selected_popular):
+                if add_candidate(selected_popular[popular_index]):
+                    popular_added += 1
+                    added = True
+                popular_index += 1
+            elif similar_added < target_per_source and similar_index < len(selected_similar):
+                if add_candidate(selected_similar[similar_index]):
+                    similar_added += 1
+                    added = True
+                similar_index += 1
+            else:
+                break
+
+            if added:
+                prefer_popular = not prefer_popular
+
+        if popular_added < target_per_source:
+            for track in similar_candidates[target_per_source:]:
+                if len(ordered_ids) >= DISCOVERY_LIMIT:
+                    break
+                add_candidate(track)
+        if similar_added < target_per_source:
+            for track in popular_candidates[target_per_source:]:
+                if len(ordered_ids) >= DISCOVERY_LIMIT:
+                    break
+                add_candidate(track)
+
+        if len(ordered_ids) < DISCOVERY_LIMIT:
+            for track in popular_candidates[target_per_source:] + similar_candidates[target_per_source:]:
+                if len(ordered_ids) >= DISCOVERY_LIMIT:
+                    break
+                add_candidate(track)
+
+        return [merged_candidates[track_id] for track_id in ordered_ids[:DISCOVERY_LIMIT]]

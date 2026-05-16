@@ -5,6 +5,8 @@ import test from "node:test";
 import type {
   BackendEnvelope,
   ConfigData,
+  DiscoveryData,
+  DiscoveryRequest,
   RecommendationData,
   RecommendationRequest,
   TopListenRequest,
@@ -174,6 +176,68 @@ test("normalizeBackendEnvelope accepts a machine-readable recommend envelope", (
   const recommendationData = envelope.data as RecommendationData;
   assert.equal(recommendationData.includeArchived, true);
   assert.equal(recommendationData.recommendations[0]?.archived, true);
+});
+
+test("buildBackendInvocation appends discovery clear flag", () => {
+  const invocation = buildBackendInvocation("discovery", ["--clear"], {
+    MUSIC_SYNC_BACKEND_COMMAND: '["python", "-m", "music_synchronizer.backend_cli"]',
+    MUSIC_SYNC_REPO_ROOT: "/tmp/music-sync",
+  });
+
+  assert.equal(invocation.command, "python");
+  assert.deepEqual(invocation.args, [
+    "-m",
+    "music_synchronizer.backend_cli",
+    "discovery",
+    "--clear",
+  ]);
+});
+
+test("normalizeBackendEnvelope accepts a machine-readable discovery envelope", () => {
+  const envelope = normalizeBackendEnvelope("discovery", {
+    stdout: JSON.stringify({
+      ok: true,
+      command: "discovery",
+      data: {
+        summary: {
+          added: 1,
+          skipped: 0,
+          removedLiked: 2,
+          cleared: 0,
+          total: 3,
+        },
+        recommendations: [
+          {
+            trackId: "10",
+            title: "Popular One",
+            artists: ["Artist A"],
+            album: "Album",
+            systemTags: ["indie"],
+            year: 2024,
+            coverUrl: "",
+            durationSeconds: 180,
+            yandexUrl: "https://music.yandex.ru/track/10",
+            monthlyListens: 5,
+            discoverySources: ["artist-popular"],
+            explain: "artist-popular",
+          },
+        ],
+      },
+    }),
+    stderr: "",
+    exitCode: 0,
+  }, {
+    clear: false,
+  } as DiscoveryRequest);
+
+  assert.equal(envelope.ok, true);
+  if (!envelope.ok) {
+    throw new Error("expected success envelope");
+  }
+
+  const discoveryData = envelope.data as DiscoveryData;
+  assert.equal(discoveryData.summary.added, 1);
+  assert.equal(discoveryData.recommendations[0]?.trackId, "10");
 });
 
 test("normalizeBackendEnvelope surfaces backend error envelopes", () => {

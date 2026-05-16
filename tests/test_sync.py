@@ -1,7 +1,15 @@
 from datetime import datetime, timezone
 
 from music_synchronizer.config import Settings
-from music_synchronizer.models import DashboardData, DashboardStatEntry, SavedTrackInfo, TrackDashboardEntry
+from music_synchronizer.models import (
+    DashboardData,
+    DashboardStatEntry,
+    DiscoverySummary,
+    DiscoveryTrackInfo,
+    SavedTrackInfo,
+    SyncSummary,
+    TrackDashboardEntry,
+)
 from music_synchronizer.models import TrackInfo
 from music_synchronizer.sync import MONTHLY_TOP_LIMIT, SyncService
 
@@ -24,6 +32,28 @@ def _track(
         source_position=source_position,
         yandex_url=f"https://music.yandex.ru/track/{track_id}",
         monthly_listens=monthly_listens,
+    )
+
+
+def _discovery_track(
+    track_id: str,
+    title: str,
+    *,
+    source: str,
+    monthly_listens: int | None = None,
+) -> DiscoveryTrackInfo:
+    return DiscoveryTrackInfo(
+        track_id=track_id,
+        title=title,
+        artists=[f"Artist {track_id}"],
+        album="Album",
+        system_tags=["indie"],
+        year=2024,
+        cover_url="",
+        duration_seconds=180,
+        yandex_url=f"https://music.yandex.ru/track/{track_id}",
+        monthly_listens=monthly_listens,
+        discovery_sources=[source],
     )
 
 
@@ -284,3 +314,137 @@ def test_relisten_recommendations_pass_archived_flag_to_exporter(monkeypatch) ->
 
     assert recommendations == []
     assert captured_flags == [True]
+
+
+def test_discovery_recommendations_mix_sources_and_save_results(monkeypatch) -> None:
+    service = SyncService(Settings.model_construct(yandex_music_token="token"))
+    liked_tracks = [
+        _track("1", "Liked One", monthly_listens=7, source_position=1),
+        _track("2", "Liked Two", monthly_listens=5, source_position=2),
+    ]
+    saved_payload: dict[str, object] = {}
+
+    monkeypatch.setattr(
+        service.client,
+        "fetch_liked_tracks",
+        lambda *, reference_time: liked_tracks,
+    )
+    monkeypatch.setattr(
+        service.client,
+        "fetch_recent_liked_track_ids",
+        lambda *, liked_track_ids, reference_time, limit: ["1", "2"],
+    )
+    monkeypatch.setattr(
+        service.client,
+        "fetch_popular_tracks_for_artist_seeds",
+        lambda seed_track_ids, exclude_track_ids: [
+            _discovery_track("10", "Popular One", source="artist-popular"),
+            _discovery_track("11", "Popular Two", source="artist-popular"),
+            _discovery_track("12", "Popular Three", source="artist-popular"),
+        ],
+    )
+    monkeypatch.setattr(
+        service.client,
+        "fetch_similar_tracks",
+        lambda seed_track_ids, exclude_track_ids: [
+            _discovery_track("20", "Similar One", source="similar"),
+            _discovery_track("11", "Popular Two", source="similar"),
+            _discovery_track("21", "Similar Two", source="similar"),
+        ],
+    )
+    monkeypatch.setattr(service.exporter, "read_discovery_tracks", lambda: [_discovery_track("30", "Existing", source="similar")])
+
+    def fake_save(tracks: list[DiscoveryTrackInfo]) -> DiscoverySummary:
+        saved_payload["tracks"] = tracks
+        return DiscoverySummary(added=5, skipped=0, removed_liked=0, cleared=0, total=6)
+
+    monkeypatch.setattr(service.exporter, "save_discovery_tracks", fake_save)
+
+    recommendations, summary = service.discovery_recommendations()
+
+    assert [track.track_id for track in recommendations] == ["10", "20", "11", "21", "12"]
+    assert recommendations[2].discovery_sources == ["artist-popular", "similar"]
+    assert saved_payload["tracks"] == recommendations
+    assert summary == DiscoverySummary(added=5, skipped=0, removed_liked=0, cleared=0, total=6)
+
+
+def test_discovery_recommendations_backfill_from_other_source(monkeypatch) -> None:
+    service = SyncService(Settings.model_construct(yandex_music_token="token"))
+    liked_tracks = [_track("1", "Liked One", monthly_listens=7, source_position=1)]
+
+    monkeypatch.setattr(
+        service.client,
+        "fetch_liked_tracks",
+        lambda *, reference_time: liked_tracks,
+    )
+    monkeypatch.setattr(
+        service.client,
+        "fetch_recent_liked_track_ids",
+        lambda *, liked_track_ids, reference_time, limit: ["1"],
+    )
+    monkeypatch.setattr(
+        service.client,
+        "fetch_popular_tracks_for_artist_seeds",
+        lambda seed_track_ids, exclude_track_ids: [_discovery_track("10", "Popular One", source="artist-popular")],
+    )
+    monkeypatch.setattr(
+        service.client,
+        "fetch_similar_tracks",
+        lambda seed_track_ids, exclude_track_ids: [
+            _discovery_track("20", "Similar One", source="similar"),
+            _discovery_track("21", "Similar Two", source="similar"),
+            _discovery_track("22", "Similar Three", source="similar"),
+        ],
+    )
+    monkeypatch.setattr(service.exporter, "read_discovery_tracks", lambda: [])
+    monkeypatch.setattr(
+        service.exporter,
+        "save_discovery_tracks",
+        lambda tracks: DiscoverySummary(added=len(tracks), skipped=0, removed_liked=0, cleared=0, total=len(tracks)),
+    )
+
+    recommendations, summary = service.discovery_recommendations()
+
+    assert [track.track_id for track in recommendations] == ["10", "20", "21", "22"]
+    assert summary.total == 4
+
+
+def test_sync_removes_discovery_tracks_that_became_liked(monkeypatch) -> None:
+    service = SyncService(Settings.model_construct(yandex_music_token="token"))
+    synced_at = datetime.now(timezone.utc)
+    liked_tracks = [_track("1", "Liked One", monthly_listens=7, source_position=1)]
+    removed_like_ids: list[set[str]] = []
+
+    monkeypatch.setattr(
+        service.client,
+        "fetch_liked_tracks",
+        lambda *, reference_time: liked_tracks,
+    )
+    monkeypatch.setattr(
+        service.exporter,
+        "sync",
+        lambda tracks, synced_at: SyncSummary(added=1, unchanged=0, removed=0),
+    )
+    monkeypatch.setattr(
+        service.exporter,
+        "remove_discovery_tracks_by_ids",
+        lambda track_ids: removed_like_ids.append(track_ids) or 2,
+    )
+
+    summary = service.run()
+
+    assert summary == SyncSummary(added=1, unchanged=0, removed=0)
+    assert removed_like_ids == [{"1"}]
+
+
+def test_clear_discovery_recommendations_delegates_to_exporter(monkeypatch) -> None:
+    service = SyncService(Settings.model_construct(yandex_music_token="token"))
+    monkeypatch.setattr(
+        service.exporter,
+        "clear_discovery_tracks",
+        lambda: DiscoverySummary(added=0, skipped=0, removed_liked=0, cleared=3, total=0),
+    )
+
+    summary = service.clear_discovery_recommendations()
+
+    assert summary == DiscoverySummary(added=0, skipped=0, removed_liked=0, cleared=3, total=0)
