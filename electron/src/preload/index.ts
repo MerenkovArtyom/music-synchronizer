@@ -1,7 +1,7 @@
 import { contextBridge, ipcRenderer } from "electron";
 
 import type { MusicSyncBridge } from "../shared/bridge.js";
-import type { ListTracksRequest, TopListenRequest } from "../shared/contracts.js";
+import type { ListTracksRequest, RecommendationRequest, TopListenRequest } from "../shared/contracts.js";
 
 const api: MusicSyncBridge = {
   showConfig: async () => {
@@ -18,6 +18,9 @@ const api: MusicSyncBridge = {
   },
   getDashboard: async () => {
     return await ipcRenderer.invoke("music-sync:dashboard");
+  },
+  getRecommendations: async (request: RecommendationRequest) => {
+    return await ipcRenderer.invoke("music-sync:recommend", request);
   },
 };
 

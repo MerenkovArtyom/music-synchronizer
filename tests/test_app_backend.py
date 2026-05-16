@@ -144,6 +144,16 @@ def test_top_listen_returns_most_or_least_entries(monkeypatch: pytest.MonkeyPatc
     assert app.top_listen(mode="least") == {"mostPlayed": [], "leastPlayed": []}
 
 
+def test_recommend_returns_machine_readable_data(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    app = MusicSyncApp(settings=_settings(tmp_path))
+    monkeypatch.setattr(app.service, "relisten_recommendations", lambda *, include_archived: [])
+
+    assert app.recommend(include_archived=True) == {
+        "includeArchived": True,
+        "recommendations": [],
+    }
+
+
 def test_backend_command_runner_wraps_domain_errors(tmp_path: Path) -> None:
     app = MusicSyncApp(settings=_settings(tmp_path))
 

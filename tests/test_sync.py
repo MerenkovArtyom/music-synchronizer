@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 
 from music_synchronizer.config import Settings
-from music_synchronizer.models import DashboardData, DashboardStatEntry, TrackDashboardEntry
+from music_synchronizer.models import DashboardData, DashboardStatEntry, SavedTrackInfo, TrackDashboardEntry
 from music_synchronizer.models import TrackInfo
 from music_synchronizer.sync import MONTHLY_TOP_LIMIT, SyncService
 
@@ -190,3 +190,97 @@ def test_refresh_dashboard_delegates_to_exporter_without_api(monkeypatch) -> Non
     result = service.refresh_dashboard()
 
     assert result == refreshed
+
+
+def test_relisten_recommendations_rank_old_matching_tracks_without_api(monkeypatch) -> None:
+    service = SyncService(Settings.model_construct(yandex_music_token="token"))
+    tracks = [
+        SavedTrackInfo(
+            track_id="1",
+            title="Recent Favorite",
+            artists=["Artist A"],
+            tags=["indie", "night"],
+            system_tags=["indie"],
+            user_tags=["night"],
+            monthly_listens=9,
+            source_position=1,
+        ),
+        SavedTrackInfo(
+            track_id="2",
+            title="Another Recent Favorite",
+            artists=["Artist B"],
+            tags=["ambient", "focus"],
+            system_tags=["ambient"],
+            user_tags=["focus"],
+            monthly_listens=7,
+            source_position=2,
+        ),
+        SavedTrackInfo(
+            track_id="3",
+            title="Old Match",
+            artists=["Artist A"],
+            tags=["indie", "night"],
+            system_tags=["indie"],
+            user_tags=["night"],
+            monthly_listens=0,
+            source_position=4,
+        ),
+        SavedTrackInfo(
+            track_id="4",
+            title="Tag Match",
+            artists=["Artist C"],
+            tags=["ambient", "focus"],
+            system_tags=["ambient"],
+            user_tags=["focus"],
+            monthly_listens=None,
+            source_position=5,
+        ),
+        SavedTrackInfo(
+            track_id="5",
+            title="No Signal",
+            artists=["Artist Z"],
+            tags=["metal"],
+            system_tags=["metal"],
+            user_tags=[],
+            monthly_listens=None,
+            source_position=6,
+        ),
+    ]
+
+    monkeypatch.setattr(
+        service.exporter,
+        "recommendation_tracks",
+        lambda *, include_archived: tracks,
+    )
+    monkeypatch.setattr(
+        service.client,
+        "fetch_liked_tracks",
+        lambda *, reference_time: (_ for _ in ()).throw(AssertionError("Yandex client must not be used")),
+    )
+
+    recommendations = service.relisten_recommendations(include_archived=False)
+
+    assert [entry.title for entry in recommendations] == ["Old Match", "Tag Match"]
+    assert recommendations[0].matched_artists == ["Artist A"]
+    assert recommendations[0].matched_genres == ["indie"]
+    assert recommendations[0].matched_user_tags == ["night"]
+    assert recommendations[0].archived is False
+    assert recommendations[1].matched_artists == []
+    assert recommendations[1].matched_genres == ["ambient"]
+    assert recommendations[1].matched_user_tags == ["focus"]
+
+
+def test_relisten_recommendations_pass_archived_flag_to_exporter(monkeypatch) -> None:
+    service = SyncService(Settings.model_construct(yandex_music_token="token"))
+    captured_flags: list[bool] = []
+
+    def fake_recommendation_tracks(*, include_archived: bool) -> list[SavedTrackInfo]:
+        captured_flags.append(include_archived)
+        return []
+
+    monkeypatch.setattr(service.exporter, "recommendation_tracks", fake_recommendation_tracks)
+
+    recommendations = service.relisten_recommendations(include_archived=True)
+
+    assert recommendations == []
+    assert captured_flags == [True]

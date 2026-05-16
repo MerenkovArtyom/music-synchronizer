@@ -44,6 +44,17 @@ def _format_dashboard_stat(entry: DashboardStatEntry | None, *, include_monthly_
     return f"{entry.name} | tracks={entry.count}"
 
 
+def _format_recommendation_entry(index: int, entry: dict[str, object]) -> str:
+    artists = ", ".join(entry["artists"]) if entry["artists"] else "Unknown Artist"
+    monthly_listens = entry["monthlyListens"]
+    archived = "yes" if entry["archived"] else "no"
+    return (
+        f"{index}. {entry['title']} - {artists} | "
+        f"monthly_listens={'-' if monthly_listens is None else monthly_listens} | "
+        f"archived={archived} | explain={entry['explain']}"
+    )
+
+
 def _emit_dashboard_summary(payload: dict[str, object]) -> None:
     typer.echo(f"Dashboard updated: {payload['path']}")
     summary = payload["summary"]
@@ -193,6 +204,23 @@ def top_listen(
             f"{index}. {entry['title']} - {', '.join(entry['artists']) if entry['artists'] else 'Unknown Artist'} | "
             f"monthly_listens={entry['monthlyListens']} | position={entry['position']}"
         )
+
+
+@app.command("recommend")
+def recommend(
+    archived: bool = typer.Option(False, "--archived", help="Include archived liked tracks in recommendations."),
+) -> None:
+    try:
+        payload = _build_app().recommend(include_archived=archived)
+    except RuntimeError as error:
+        typer.secho(f"Recommend failed: {error}", fg=typer.colors.RED, err=True)
+        raise typer.Exit(code=1) from error
+
+    typer.echo("Recommendations:")
+    entries = payload["recommendations"]
+    assert isinstance(entries, list)
+    for index, entry in enumerate(entries, start=1):
+        typer.echo(_format_recommendation_entry(index, entry))
 
 
 @app.command(

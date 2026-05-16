@@ -28,6 +28,7 @@ uv run music-sync-app show-config
 - Подсчёт `monthly_listens` по истории прослушиваний за последние 30 дней.
 - Поиск уже сохранённых активных треков через `list --tag` и `list --artist`.
 - Локальный dashboard-файл `dashboard.md` с агрегатами по активным и архивным заметкам.
+- Локальные рекомендации, какие лайкнутые треки стоит переслушать, на основе недавних артистов, жанров и тегов.
 - Разрешение конфликтов имён файлов по схеме:
   - `title`;
   - `title - artist`;
@@ -89,6 +90,8 @@ uv run music-sync sync
 uv run music-sync dashboard
 uv run music-sync top-listen --most
 uv run music-sync top-listen --least
+uv run music-sync recommend
+uv run music-sync recommend --archived
 uv run music-sync list --tag "rock"
 uv run music-sync list --artist "Artist Name"
 uv run music-sync-app show-config
@@ -102,6 +105,8 @@ uv run music-sync-app show-config
 - `uv run music-sync dashboard` — пересчитывает `dashboard.md` только по локально сохранённым заметкам в vault.
 - `uv run music-sync top-listen --most` — показывает top 10 локально сохранённых треков с самым большим `monthly_listens`.
 - `uv run music-sync top-listen --least` — показывает top 10 локально сохранённых треков с самым маленьким `monthly_listens`.
+- `uv run music-sync recommend` — рекомендует похожие лайкнутые треки, которые давно не слушались.
+- `uv run music-sync recommend --archived` — то же самое, но дополнительно включает архив `tracks/_removed/`.
 - `uv run music-sync list --tag "rock"` — ищет активные сохранённые треки по тегу.
 - `uv run music-sync list --artist "Artist Name"` — ищет активные сохранённые треки по артисту.
 - `uv run music-sync-app ...` — machine-readable backend entrypoint для desktop app; печатает JSON envelope вместо человекочитаемого текста.
@@ -128,7 +133,16 @@ uv run music-sync-app show-config
 - команда читает только локальные заметки в `tracks/` и `tracks/_removed/`;
 - Yandex Music API не используется;
 - файл `dashboard.md` создаётся в корне vault;
-- в отчёт входят счётчики активных и архивных треков, длительность, покрытие `monthly_listens`, лидеры по тегам и артистам.
+- в отчёт входят счётчики активных и архивных треков, длительность, покрытие `monthly_listens`, лидеры по тегам и артистам, а также блок рекомендаций.
+
+Особенности команды `recommend`:
+
+- команда читает только локальные заметки и не обращается к Yandex Music API;
+- по умолчанию участвуют только активные заметки из `tracks/`;
+- флаг `--archived` дополнительно включает архив `tracks/_removed/`;
+- “жанры” берутся из `system_tags`, а пользовательские сигналы из `user_tags`;
+- рекомендация требует хотя бы одного совпадения по артисту, жанру или пользовательскому тегу;
+- в выдаче не больше 10 треков.
 
 ## Как устроена синхронизация
 

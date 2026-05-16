@@ -2,7 +2,13 @@ import assert from "node:assert/strict";
 import path from "node:path";
 import test from "node:test";
 
-import type { BackendEnvelope, ConfigData, TopListenRequest } from "../src/shared/contracts.js";
+import type {
+  BackendEnvelope,
+  ConfigData,
+  RecommendationData,
+  RecommendationRequest,
+  TopListenRequest,
+} from "../src/shared/contracts.js";
 import {
   BackendRunnerError,
   buildBackendInvocation,
@@ -129,6 +135,45 @@ test("normalizeBackendEnvelope accepts a machine-readable top-listen envelope", 
     ],
     leastPlayed: [],
   });
+});
+
+test("normalizeBackendEnvelope accepts a machine-readable recommend envelope", () => {
+  const envelope = normalizeBackendEnvelope("recommend", {
+    stdout: JSON.stringify({
+      ok: true,
+      command: "recommend",
+      data: {
+        includeArchived: true,
+        recommendations: [
+          {
+            title: "Old Match",
+            artists: ["Artist A"],
+            monthlyListens: 0,
+            position: 4,
+            archived: true,
+            matchedArtists: ["Artist A"],
+            matchedGenres: ["indie"],
+            matchedUserTags: ["night"],
+            score: 16,
+            explain: "artists=Artist A; genres=indie; user_tags=night",
+          },
+        ],
+      },
+    }),
+    stderr: "",
+    exitCode: 0,
+  }, {
+    archived: true,
+  } as RecommendationRequest);
+
+  assert.equal(envelope.ok, true);
+  if (!envelope.ok) {
+    throw new Error("expected success envelope");
+  }
+
+  const recommendationData = envelope.data as RecommendationData;
+  assert.equal(recommendationData.includeArchived, true);
+  assert.equal(recommendationData.recommendations[0]?.archived, true);
 });
 
 test("normalizeBackendEnvelope surfaces backend error envelopes", () => {

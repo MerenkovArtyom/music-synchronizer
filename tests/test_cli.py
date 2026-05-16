@@ -17,6 +17,7 @@ def test_help_shows_sync_placeholder() -> None:
     assert "sync" in result.output
     assert "show-config" in result.output
     assert "top-listen" in result.output
+    assert "recommend" in result.output
 
 
 def _dashboard_data() -> DashboardData:
@@ -341,6 +342,88 @@ def test_top_listen_rejects_both_flags() -> None:
 
     assert result.exit_code == 2
     assert "Exactly one of --most or --least must be provided." in result.output
+
+
+def test_recommend_prints_recommendations(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setenv("YANDEX_MUSIC_TOKEN", "token")
+    monkeypatch.setenv("OBSIDIAN_VAULT_PATH", str(tmp_path))
+
+    class FakeMusicSyncApp:
+        def recommend(self, *, include_archived: bool) -> dict[str, object]:
+            assert include_archived is False
+            return {
+                "includeArchived": False,
+                "recommendations": [
+                    {
+                        "title": "Old Match",
+                        "artists": ["Artist A"],
+                        "monthlyListens": 0,
+                        "position": 4,
+                        "archived": False,
+                        "matchedArtists": ["Artist A"],
+                        "matchedGenres": ["indie"],
+                        "matchedUserTags": ["night"],
+                        "score": 16,
+                        "explain": "artists=Artist A; genres=indie; user_tags=night",
+                    }
+                ],
+            }
+
+    monkeypatch.setattr("music_synchronizer.cli._build_app", lambda: FakeMusicSyncApp())
+
+    result = CliRunner().invoke(app, ["recommend"])
+
+    assert result.exit_code == 0
+    assert result.output.strip().splitlines() == [
+        "Recommendations:",
+        "1. Old Match - Artist A | monthly_listens=0 | archived=no | explain=artists=Artist A; genres=indie; user_tags=night",
+    ]
+
+
+def test_recommend_passes_archived_flag(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setenv("YANDEX_MUSIC_TOKEN", "token")
+    monkeypatch.setenv("OBSIDIAN_VAULT_PATH", str(tmp_path))
+
+    class FakeMusicSyncApp:
+        def recommend(self, *, include_archived: bool) -> dict[str, object]:
+            assert include_archived is True
+            return {
+                "includeArchived": True,
+                "recommendations": [],
+            }
+
+    monkeypatch.setattr("music_synchronizer.cli._build_app", lambda: FakeMusicSyncApp())
+
+    result = CliRunner().invoke(app, ["recommend", "--archived"])
+
+    assert result.exit_code == 0
+    assert result.output.strip() == "Recommendations:"
+
+
+def test_recommend_reports_backend_errors(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setenv("YANDEX_MUSIC_TOKEN", "token")
+    monkeypatch.setenv("OBSIDIAN_VAULT_PATH", str(tmp_path))
+
+    class FakeMusicSyncApp:
+        def recommend(self, *, include_archived: bool) -> dict[str, object]:
+            raise RuntimeError("recommendations unavailable")
+
+    monkeypatch.setattr("music_synchronizer.cli._build_app", lambda: FakeMusicSyncApp())
+
+    result = CliRunner().invoke(app, ["recommend"])
+
+    assert result.exit_code == 1
+    assert result.stdout == ""
+    assert result.stderr.strip() == "Recommend failed: recommendations unavailable"
 
 
 def test_list_filters_active_tracks_by_tag(

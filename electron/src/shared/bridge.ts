@@ -5,6 +5,8 @@ import type {
   ListData,
   ListTracksRequest,
   MonthlyTopData,
+  RecommendationData,
+  RecommendationRequest,
   SyncData,
   TopListenRequest,
 } from "./contracts.js";
@@ -15,4 +17,5 @@ export interface MusicSyncBridge {
   listTracks: (request: ListTracksRequest) => Promise<BackendEnvelope<ListData>>;
   getTopListen: (request: TopListenRequest) => Promise<BackendEnvelope<MonthlyTopData>>;
   getDashboard: () => Promise<BackendEnvelope<DashboardData>>;
+  getRecommendations: (request: RecommendationRequest) => Promise<BackendEnvelope<RecommendationData>>;
 }

@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 
 @dataclass(frozen=True, slots=True)
@@ -65,6 +65,30 @@ class TrackDashboardEntry:
 
 
 @dataclass(frozen=True, slots=True)
+class RelistenRecommendationEntry:
+    title: str
+    artists: list[str]
+    monthly_listens: int | None
+    position: int | None
+    archived: bool
+    matched_artists: list[str]
+    matched_genres: list[str]
+    matched_user_tags: list[str]
+    score: int
+
+    @property
+    def explain(self) -> str:
+        parts: list[str] = []
+        if self.matched_artists:
+            parts.append(f"artists={', '.join(self.matched_artists)}")
+        if self.matched_genres:
+            parts.append(f"genres={', '.join(self.matched_genres)}")
+        if self.matched_user_tags:
+            parts.append(f"user_tags={', '.join(self.matched_user_tags)}")
+        return "; ".join(parts)
+
+
+@dataclass(frozen=True, slots=True)
 class DashboardData:
     liked_tracks_count: int
     removed_tracks_count: int
@@ -81,3 +105,4 @@ class DashboardData:
     longest_track: TrackDashboardEntry | None
     top_tags: list[DashboardStatEntry]
     top_artists: list[DashboardStatEntry]
+    relisten_recommendations: list[RelistenRecommendationEntry] = field(default_factory=list)

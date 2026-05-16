@@ -14,6 +14,8 @@ def _build_parser() -> argparse.ArgumentParser:
     subparsers.add_parser("show-config")
     subparsers.add_parser("sync")
     subparsers.add_parser("dashboard")
+    recommend_parser = subparsers.add_parser("recommend")
+    recommend_parser.add_argument("--archived", action="store_true")
 
     list_parser = subparsers.add_parser("list")
     list_group = list_parser.add_mutually_exclusive_group(required=True)
@@ -39,6 +41,8 @@ def _payload_for_args(app: MusicSyncApp, args: argparse.Namespace) -> dict[str, 
         if args.tag is not None:
             return app.run_command("list", kind="tag", value=args.tag)
         return app.run_command("list", kind="artist", value=args.artist)
+    if args.command == "recommend":
+        return app.run_command("recommend", include_archived=args.archived)
 
     return app.run_command("top-listen", mode="most" if args.most else "least")
 

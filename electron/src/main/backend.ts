@@ -9,11 +9,19 @@ import type {
   ListData,
   ListTracksRequest,
   MonthlyTopData,
+  RecommendationData,
+  RecommendationRequest,
   SyncData,
   TopListenRequest,
 } from "../shared/contracts.js";
 
-type BackendData = ConfigData | SyncData | ListData | MonthlyTopData | DashboardData;
+type BackendData =
+  | ConfigData
+  | SyncData
+  | ListData
+  | MonthlyTopData
+  | DashboardData
+  | RecommendationData;
 
 export interface BackendRuntimeEnv extends NodeJS.ProcessEnv {
   MUSIC_SYNC_BACKEND_COMMAND?: string;
@@ -71,7 +79,7 @@ function resolveCommandTokens(tokens: string[], cwd: string | undefined): string
 
 function buildRequestArgs(
   command: BackendCommand,
-  request?: ListTracksRequest | TopListenRequest,
+  request?: ListTracksRequest | TopListenRequest | RecommendationRequest,
 ): string[] {
   if (command === "list") {
     const listRequest = request as ListTracksRequest | undefined;
@@ -89,6 +97,14 @@ function buildRequestArgs(
       return [];
     }
     return [topListenRequest.mode === "least" ? "--least" : "--most"];
+  }
+
+  if (command === "recommend") {
+    const recommendationRequest = request as RecommendationRequest | undefined;
+    if (!recommendationRequest?.archived) {
+      return [];
+    }
+    return ["--archived"];
   }
 
   return [];
@@ -190,7 +206,7 @@ export function buildBackendInvocation(
 export function normalizeBackendEnvelope(
   command: BackendCommand,
   result: BackendProcessResult,
-  request?: ListTracksRequest | TopListenRequest,
+  request?: ListTracksRequest | TopListenRequest | RecommendationRequest,
 ): BackendEnvelope<BackendData> {
   const trimmed = result.stdout.trim();
   if (trimmed === "") {
@@ -290,7 +306,7 @@ function runProcess(invocation: BackendInvocation, env: BackendRuntimeEnv): Prom
 
 export async function runBackendCommand(
   command: BackendCommand,
-  request: ListTracksRequest | TopListenRequest | undefined,
+  request: ListTracksRequest | TopListenRequest | RecommendationRequest | undefined,
   env: BackendRuntimeEnv,
   context: BackendRuntimeContext,
 ): Promise<BackendEnvelope<BackendData>> {

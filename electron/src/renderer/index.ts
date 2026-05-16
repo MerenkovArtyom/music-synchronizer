@@ -6,6 +6,8 @@ import type {
   ListData,
   ListTracksRequest,
   MonthlyTopData,
+  RecommendationData,
+  RecommendationRequest,
   SyncData,
   TopListenRequest,
 } from "../shared/contracts.js";
@@ -33,6 +35,10 @@ const trackResults = document.querySelector<HTMLUListElement>("#track-results");
 const monthlyTopEmpty = document.querySelector<HTMLElement>("#monthly-top-empty");
 const mostPlayedResults = document.querySelector<HTMLUListElement>("#most-played-results");
 const leastPlayedResults = document.querySelector<HTMLUListElement>("#least-played-results");
+const recommendButton = document.querySelector<HTMLButtonElement>("#recommend-load");
+const recommendArchived = document.querySelector<HTMLInputElement>("#recommend-archived");
+const recommendEmpty = document.querySelector<HTMLElement>("#recommend-empty");
+const recommendResults = document.querySelector<HTMLUListElement>("#recommend-results");
 
 function updateStatus(
   state: "idle" | "busy" | "success" | "error",
@@ -66,6 +72,9 @@ function setBusy(isBusy: boolean): void {
   }
   if (monthlyTopButton) {
     monthlyTopButton.disabled = isBusy;
+  }
+  if (recommendButton) {
+    recommendButton.disabled = isBusy;
   }
 }
 
@@ -251,6 +260,30 @@ function renderDashboard(data: DashboardData): void {
   }
 }
 
+function renderRecommendations(data: RecommendationData): void {
+  if (!recommendResults || !recommendEmpty) {
+    return;
+  }
+
+  recommendResults.innerHTML = "";
+  if (data.recommendations.length === 0) {
+    recommendEmpty.textContent = "No recommendations found for the current local taste profile.";
+    return;
+  }
+
+  recommendEmpty.textContent = `Loaded ${data.recommendations.length} recommendation(s).`;
+  for (const entry of data.recommendations) {
+    const item = document.createElement("li");
+    item.innerHTML = `
+      <span class="track-title">${escapeHtml(entry.title)}</span>
+      <span class="track-artists">${escapeHtml(entry.artists.join(", ") || "Unknown Artist")}</span>
+      <span class="track-meta">${escapeHtml(`Monthly listens: ${entry.monthlyListens === null ? "-" : entry.monthlyListens} | Archived: ${entry.archived ? "yes" : "no"}`)}</span>
+      <span class="track-meta">${escapeHtml(entry.explain)}</span>
+    `;
+    recommendResults.appendChild(item);
+  }
+}
+
 function errorSummary<T>(result: BackendEnvelope<T>): string {
   if (result.ok) {
     return "Unexpected success result.";
@@ -397,6 +430,31 @@ async function loadMonthlyTop(): Promise<void> {
   setBusy(false);
 }
 
+async function loadRecommendations(): Promise<void> {
+  const request: RecommendationRequest = {
+    archived: Boolean(recommendArchived?.checked),
+  };
+
+  setBusy(true);
+  updateStatus("busy", "Recommend", "Loading local re-listen recommendations from the Python backend.");
+
+  const result = await window.musicSync.getRecommendations(request);
+  if (result.ok) {
+    renderRecommendations(result.data);
+    updateStatus("success", "Recommend", "Recommendation report loaded from local vault data.");
+  } else {
+    if (recommendEmpty) {
+      recommendEmpty.textContent = "Recommendation request failed.";
+    }
+    if (recommendResults) {
+      recommendResults.innerHTML = "";
+    }
+    updateStatus("error", "Recommend Error", errorSummary(result));
+  }
+
+  setBusy(false);
+}
+
 refreshConfigButton?.addEventListener("click", () => {
   void loadConfig();
 });
@@ -419,6 +477,10 @@ listForm?.addEventListener("submit", (event) => {
 
 monthlyTopButton?.addEventListener("click", () => {
   void loadMonthlyTop();
+});
+
+recommendButton?.addEventListener("click", () => {
+  void loadRecommendations();
 });
 
 void loadConfig();

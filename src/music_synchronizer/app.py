@@ -4,10 +4,17 @@ from dataclasses import asdict, is_dataclass
 from typing import Any, Literal
 
 from music_synchronizer.config import Settings
-from music_synchronizer.models import DashboardData, DashboardStatEntry, MonthlyTopEntry, SavedTrackInfo, TrackDashboardEntry
+from music_synchronizer.models import (
+    DashboardData,
+    DashboardStatEntry,
+    MonthlyTopEntry,
+    RelistenRecommendationEntry,
+    SavedTrackInfo,
+    TrackDashboardEntry,
+)
 from music_synchronizer.sync import SyncService
 
-BackendCommand = Literal["show-config", "sync", "dashboard", "list", "top-listen"]
+BackendCommand = Literal["show-config", "sync", "dashboard", "list", "top-listen", "recommend"]
 TopListenMode = Literal["most", "least"]
 ListFilterKind = Literal["tag", "artist"]
 
@@ -68,6 +75,21 @@ def _top_listen_entry_payload(entry: MonthlyTopEntry) -> dict[str, Any]:
         "artists": entry.artists,
         "monthlyListens": entry.monthly_listens,
         "position": entry.source_position,
+    }
+
+
+def _recommendation_entry_payload(entry: RelistenRecommendationEntry) -> dict[str, Any]:
+    return {
+        "title": entry.title,
+        "artists": entry.artists,
+        "monthlyListens": entry.monthly_listens,
+        "position": entry.position,
+        "archived": entry.archived,
+        "matchedArtists": entry.matched_artists,
+        "matchedGenres": entry.matched_genres,
+        "matchedUserTags": entry.matched_user_tags,
+        "score": entry.score,
+        "explain": entry.explain,
     }
 
 
@@ -133,6 +155,13 @@ class MusicSyncApp:
             "leastPlayed": payload if mode == "least" else [],
         }
 
+    def recommend(self, *, include_archived: bool) -> dict[str, Any]:
+        entries = self.service.relisten_recommendations(include_archived=include_archived)
+        return {
+            "includeArchived": include_archived,
+            "recommendations": [_recommendation_entry_payload(entry) for entry in entries],
+        }
+
     def run_command(self, command: BackendCommand, **kwargs: Any) -> dict[str, Any]:
         try:
             data = self._dispatch(command, **kwargs)
@@ -162,6 +191,8 @@ class MusicSyncApp:
             return self.dashboard()
         if command == "list":
             return self.list_tracks(kind=kwargs["kind"], value=kwargs["value"])
+        if command == "recommend":
+            return self.recommend(include_archived=kwargs["include_archived"])
         return self.top_listen(mode=kwargs["mode"])
 
     def _dashboard_summary_payload(self, dashboard: DashboardData) -> dict[str, Any]:
@@ -204,4 +235,6 @@ def _error_code(command: BackendCommand) -> str:
         return "DASHBOARD_FAILED"
     if command == "list":
         return "LIST_FAILED"
+    if command == "recommend":
+        return "RECOMMEND_FAILED"
     return "TOP_LISTEN_FAILED"

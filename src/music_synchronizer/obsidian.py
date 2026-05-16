@@ -11,6 +11,7 @@ from statistics import mean, median
 from music_synchronizer.models import (
     DashboardData,
     DashboardStatEntry,
+    RelistenRecommendationEntry,
     SavedTrackInfo,
     SyncSummary,
     TrackDashboardEntry,
@@ -160,6 +161,12 @@ class ObsidianExporter:
     def top_listen_tracks(self) -> list[SavedTrackInfo]:
         return self._read_saved_tracks(self.tracks_dir)
 
+    def recommendation_tracks(self, *, include_archived: bool = False) -> list[SavedTrackInfo]:
+        tracks = self._read_saved_tracks(self.tracks_dir)
+        if include_archived:
+            tracks.extend(self._read_saved_tracks(self.removed_dir))
+        return tracks
+
     def dashboard_data(self) -> DashboardData:
         active_tracks = self._read_saved_tracks(self.tracks_dir)
         removed_tracks = self._read_saved_tracks(self.removed_dir)
@@ -192,6 +199,7 @@ class ObsidianExporter:
             longest_track=longest_track,
             top_tags=top_tags,
             top_artists=top_artists,
+            relisten_recommendations=self._build_dashboard_recommendations(active_tracks),
         )
 
     def refresh_dashboard(self) -> DashboardData:
@@ -702,6 +710,73 @@ class ObsidianExporter:
             duration_text=self._format_duration(track.duration_seconds),
         )
 
+    def _build_dashboard_recommendations(
+        self,
+        tracks: list[SavedTrackInfo],
+    ) -> list[RelistenRecommendationEntry]:
+        profile_tracks = sorted(
+            [track for track in tracks if track.monthly_listens is not None and track.monthly_listens > 0],
+            key=lambda track: (
+                -(track.monthly_listens or 0),
+                track.source_position if track.source_position is not None else float("inf"),
+                track.title.casefold(),
+            ),
+        )[:20]
+        if not profile_tracks:
+            return []
+
+        recent_track_ids = {track.track_id for track in profile_tracks if track.track_id is not None}
+        artist_profile = self._normalized_name_set(
+            artist for track in profile_tracks for artist in track.artists
+        )
+        genre_profile = self._normalized_name_set(
+            tag for track in profile_tracks for tag in track.system_tags
+        )
+        user_tag_profile = self._normalized_name_set(
+            tag for track in profile_tracks for tag in track.user_tags
+        )
+        recommendations: list[RelistenRecommendationEntry] = []
+
+        for track in tracks:
+            if track.track_id in recent_track_ids:
+                continue
+
+            matched_artists = self._matching_values(track.artists, artist_profile)
+            matched_genres = self._matching_values(track.system_tags, genre_profile)
+            matched_user_tags = self._matching_values(track.user_tags, user_tag_profile)
+            if not matched_artists and not matched_genres and not matched_user_tags:
+                continue
+
+            score = (
+                len(matched_artists) * 10
+                + len(matched_genres) * 4
+                + len(matched_user_tags) * 2
+                + self._staleness_bonus(track.monthly_listens)
+            )
+            recommendations.append(
+                RelistenRecommendationEntry(
+                    title=track.title,
+                    artists=track.artists,
+                    monthly_listens=track.monthly_listens,
+                    position=track.source_position,
+                    archived=False,
+                    matched_artists=matched_artists,
+                    matched_genres=matched_genres,
+                    matched_user_tags=matched_user_tags,
+                    score=score,
+                )
+            )
+
+        recommendations.sort(
+            key=lambda entry: (
+                -entry.score,
+                entry.monthly_listens if entry.monthly_listens is not None else -1,
+                entry.position if entry.position is not None else float("inf"),
+                entry.title.casefold(),
+            )
+        )
+        return recommendations[:10]
+
     def _render_dashboard(self, dashboard: DashboardData) -> str:
         lines = [
             "# Music Dashboard",
@@ -759,8 +834,23 @@ class ObsidianExporter:
                 "## Longest Track",
                 self._render_longest_track_summary(dashboard.longest_track),
                 "",
+                "## Re-listen Recommendations",
             ]
         )
+        if dashboard.relisten_recommendations:
+            lines.extend(
+                [
+                    (
+                        f"{index}. {entry.title} - "
+                        f"{', '.join(entry.artists) if entry.artists else 'Unknown Artist'} "
+                        f"({entry.explain})"
+                    )
+                    for index, entry in enumerate(dashboard.relisten_recommendations, start=1)
+                ]
+            )
+        else:
+            lines.append("- None")
+        lines.append("")
         return "\n".join(lines)
 
     def _render_track_summary(self, track: TrackDashboardEntry | None) -> str:
@@ -778,6 +868,39 @@ class ObsidianExporter:
         listens = artist.monthly_listens if artist.monthly_listens is not None else 0
         label = "track" if artist.count == 1 else "tracks"
         return f"{artist.name} ({listens} listens across {artist.count} {label})"
+
+    def _normalized_name_set(self, values: object) -> set[str]:
+        normalized: set[str] = set()
+        for value in values:
+            if not isinstance(value, str):
+                continue
+            cleaned = value.strip().casefold()
+            if cleaned:
+                normalized.add(cleaned)
+        return normalized
+
+    def _matching_values(self, values: list[str], profile: set[str]) -> list[str]:
+        matched: list[str] = []
+        seen: set[str] = set()
+        for value in values:
+            cleaned = value.strip()
+            key = cleaned.casefold()
+            if not cleaned or key not in profile or key in seen:
+                continue
+            matched.append(cleaned)
+            seen.add(key)
+        return matched
+
+    def _staleness_bonus(self, monthly_listens: int | None) -> int:
+        if monthly_listens is None:
+            return 6
+        if monthly_listens <= 0:
+            return 5
+        if monthly_listens == 1:
+            return 4
+        if monthly_listens <= 3:
+            return 2
+        return 0
 
     def _render_tag_summary(self, tag: DashboardStatEntry | None) -> str:
         if tag is None:

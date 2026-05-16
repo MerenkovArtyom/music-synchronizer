@@ -25,6 +25,7 @@
           <a href="#dashboard-title">Dashboard</a>
           <a href="#list-title">Library</a>
           <a href="#monthly-top-title">Monthly Top</a>
+          <a href="#recommend-title">Recommendations</a>
         </nav>
         <button id="run-sync" class="button-primary topbar-cta" type="button">Run Sync</button>
       </header>
@@ -231,6 +232,25 @@
               <ul id="least-played-results" class="results"></ul>
             </section>
           </div>
+        </section>
+
+        <section class="surface-card surface-card-wide" aria-labelledby="recommend-title">
+          <div class="panel-head">
+            <div>
+              <p class="micro-label">Rediscovery</p>
+              <h2 id="recommend-title">Re-listen Recommendations</h2>
+            </div>
+            <button id="recommend-load" class="button-primary" type="button">Load Recommendations</button>
+          </div>
+          <p class="panel-copy">
+            Surface liked tracks that match recent artists, genres, and tags without touching Yandex Music.
+          </p>
+          <label class="toggle-line">
+            <input id="recommend-archived" type="checkbox" />
+            <span>Include archived</span>
+          </label>
+          <div id="recommend-empty" class="empty-state">No recommendation report loaded yet.</div>
+          <ul id="recommend-results" class="results"></ul>
         </section>
       </main>
     </div>

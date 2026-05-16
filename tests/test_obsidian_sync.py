@@ -693,3 +693,93 @@ def test_dashboard_refresh_writes_file_without_sync_input(tmp_path: Path) -> Non
     assert dashboard.liked_tracks_count == 1
     assert "# Music Dashboard" in dashboard_content
     assert "- Liked tracks: 1" in dashboard_content
+
+
+def test_recommendation_tracks_reads_active_by_default_and_archive_with_flag(tmp_path: Path) -> None:
+    exporter = ObsidianExporter(tmp_path)
+    tracks_dir = tmp_path / "tracks"
+    removed_dir = tracks_dir / "_removed"
+    tracks_dir.mkdir(parents=True, exist_ok=True)
+    removed_dir.mkdir(parents=True, exist_ok=True)
+    (tracks_dir / "Active.md").write_text(
+        "\n".join(
+            [
+                "---",
+                'track_id: "101"',
+                'title: "Active"',
+                'artists: ["Artist"]',
+                'system_tags: ["indie"]',
+                'user_tags: ["night"]',
+                "monthly_listens: 2",
+                "position: 1",
+                "---",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    (removed_dir / "Archived.md").write_text(
+        "\n".join(
+            [
+                "---",
+                'track_id: "102"',
+                'title: "Archived"',
+                'artists: ["Artist"]',
+                'system_tags: ["indie"]',
+                'user_tags: ["night"]',
+                "monthly_listens: 0",
+                "position: 2",
+                "---",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    active_only = exporter.recommendation_tracks()
+    with_archived = exporter.recommendation_tracks(include_archived=True)
+
+    assert [track.title for track in active_only] == ["Active"]
+    assert [track.title for track in with_archived] == ["Active", "Archived"]
+
+
+def test_dashboard_file_includes_relisten_recommendations_section(tmp_path: Path) -> None:
+    exporter = ObsidianExporter(tmp_path)
+    synced_at = datetime(2026, 4, 24, 12, 0, tzinfo=timezone.utc)
+
+    exporter.sync(
+        [
+            TrackInfo(
+                track_id="101",
+                title="Recent",
+                artists=["Artist A"],
+                album="Album",
+                tags=["indie"],
+                year=2024,
+                cover_url="",
+                duration_seconds=180,
+                source_position=1,
+                yandex_url="https://music.yandex.ru/track/101",
+                monthly_listens=9,
+            ),
+            TrackInfo(
+                track_id="102",
+                title="Old Match",
+                artists=["Artist A"],
+                album="Album",
+                tags=["indie"],
+                year=2024,
+                cover_url="",
+                duration_seconds=180,
+                source_position=2,
+                yandex_url="https://music.yandex.ru/track/102",
+                monthly_listens=0,
+            ),
+        ],
+        synced_at=synced_at,
+    )
+
+    dashboard_content = (tmp_path / "dashboard.md").read_text(encoding="utf-8")
+
+    assert "## Re-listen Recommendations" in dashboard_content
+    assert "1. Old Match - Artist A" in dashboard_content

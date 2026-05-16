@@ -1,4 +1,4 @@
-export type BackendCommand = "show-config" | "sync" | "list" | "top-listen" | "dashboard";
+export type BackendCommand = "show-config" | "sync" | "list" | "top-listen" | "dashboard" | "recommend";
 export type FilterKind = "tag" | "artist";
 export type TopListenMode = "most" | "least";
 
@@ -87,6 +87,26 @@ export interface DashboardData {
   }>;
 }
 
+export interface RecommendationRequest {
+  archived: boolean;
+}
+
+export interface RecommendationData {
+  includeArchived: boolean;
+  recommendations: Array<{
+    title: string;
+    artists: string[];
+    monthlyListens: number | null;
+    position: number | null;
+    archived: boolean;
+    matchedArtists: string[];
+    matchedGenres: string[];
+    matchedUserTags: string[];
+    score: number;
+    explain: string;
+  }>;
+}
+
 export interface BackendErrorPayload {
   code: string;
   message: string;
@@ -124,4 +144,5 @@ export interface RendererApi {
   listTracks: (request: ListTracksRequest) => Promise<BackendEnvelope<ListData>>;
   getTopListen: (request: TopListenRequest) => Promise<BackendEnvelope<MonthlyTopData>>;
   getDashboard: () => Promise<BackendEnvelope<DashboardData>>;
+  getRecommendations: (request: RecommendationRequest) => Promise<BackendEnvelope<RecommendationData>>;
 }
