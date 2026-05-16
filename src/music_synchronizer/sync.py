@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import datetime, timezone
 
 from music_synchronizer.config import Settings
@@ -20,6 +21,15 @@ RECENT_PROFILE_LIMIT = 20
 RECOMMENDATION_LIMIT = 10
 DISCOVERY_SEED_LIMIT = 8
 DISCOVERY_LIMIT = 20
+PRIMARY_ARTIST_RECOMMENDATION_LIMIT = 2
+
+
+@dataclass(frozen=True, slots=True)
+class _ScoredRelistenCandidate:
+    entry: RelistenRecommendationEntry
+    primary_artist_key: str | None
+    secondary_artist_keys: tuple[str, ...]
+    all_artist_keys: tuple[str, ...]
 
 
 class SyncService:
@@ -133,47 +143,23 @@ class SyncService:
         user_tag_profile = self._normalized_values(
             tag for track in profile_tracks for tag in track.user_tags
         )
-        recommendations: list[RelistenRecommendationEntry] = []
+        candidates: list[_ScoredRelistenCandidate] = []
 
         for track in tracks:
             if track.track_id in recent_track_ids:
                 continue
 
-            matched_artists = self._matching_values(track.artists, artist_profile)
-            matched_genres = self._matching_values(track.system_tags, genre_profile)
-            matched_user_tags = self._matching_values(track.user_tags, user_tag_profile)
-            if not matched_artists and not matched_genres and not matched_user_tags:
-                continue
+            candidate = self._build_relisten_candidate(
+                track,
+                active_track_ids=active_track_ids,
+                artist_profile=artist_profile,
+                genre_profile=genre_profile,
+                user_tag_profile=user_tag_profile,
+            )
+            if candidate is not None:
+                candidates.append(candidate)
 
-            score = (
-                len(matched_artists) * 10
-                + len(matched_genres) * 4
-                + len(matched_user_tags) * 2
-                + self._staleness_bonus(track.monthly_listens)
-            )
-            recommendations.append(
-                RelistenRecommendationEntry(
-                    title=track.title,
-                    artists=track.artists,
-                    monthly_listens=track.monthly_listens,
-                    position=track.source_position,
-                    archived=track.track_id not in active_track_ids,
-                    matched_artists=matched_artists,
-                    matched_genres=matched_genres,
-                    matched_user_tags=matched_user_tags,
-                    score=score,
-                )
-            )
-
-        recommendations.sort(
-            key=lambda entry: (
-                -entry.score,
-                entry.monthly_listens if entry.monthly_listens is not None else -1,
-                entry.position if entry.position is not None else float("inf"),
-                entry.title.casefold(),
-            )
-        )
-        return recommendations[:RECOMMENDATION_LIMIT]
+        return self._select_relisten_recommendations(candidates)
 
     def _active_track_ids(self, tracks: list[SavedTrackInfo], *, include_archived: bool) -> set[str]:
         if not include_archived:
@@ -207,11 +193,120 @@ class SyncService:
             seen.add(key)
         return matched
 
+    def _build_relisten_candidate(
+        self,
+        track: SavedTrackInfo,
+        *,
+        active_track_ids: set[str],
+        artist_profile: set[str],
+        genre_profile: set[str],
+        user_tag_profile: set[str],
+    ) -> _ScoredRelistenCandidate | None:
+        matched_artists = self._matching_values(track.artists, artist_profile)
+        matched_genres = self._matching_values(track.system_tags, genre_profile)
+        matched_user_tags = self._matching_values(track.user_tags, user_tag_profile)
+        if not matched_artists and not matched_genres and not matched_user_tags:
+            return None
+
+        artist_keys = self._normalized_artist_keys(track.artists)
+        score = (
+            len(matched_artists) * 7
+            + len(matched_genres) * 5
+            + len(matched_user_tags) * 4
+            + self._staleness_bonus(track.monthly_listens)
+        )
+        return _ScoredRelistenCandidate(
+            entry=RelistenRecommendationEntry(
+                title=track.title,
+                artists=track.artists,
+                monthly_listens=track.monthly_listens,
+                position=track.source_position,
+                archived=track.track_id not in active_track_ids,
+                matched_artists=matched_artists,
+                matched_genres=matched_genres,
+                matched_user_tags=matched_user_tags,
+                score=score,
+            ),
+            primary_artist_key=artist_keys[0] if artist_keys else None,
+            secondary_artist_keys=artist_keys[1:],
+            all_artist_keys=artist_keys,
+        )
+
+    def _select_relisten_recommendations(
+        self,
+        candidates: list[_ScoredRelistenCandidate],
+    ) -> list[RelistenRecommendationEntry]:
+        selected: list[_ScoredRelistenCandidate] = []
+        selected_artist_keys: set[str] = set()
+        primary_artist_counts: dict[str, int] = {}
+        remaining = list(candidates)
+
+        while remaining and len(selected) < RECOMMENDATION_LIMIT:
+            eligible = [
+                candidate
+                for candidate in remaining
+                if candidate.primary_artist_key is None
+                or primary_artist_counts.get(candidate.primary_artist_key, 0) < PRIMARY_ARTIST_RECOMMENDATION_LIMIT
+            ]
+            if not eligible:
+                break
+
+            best_candidate = min(
+                eligible,
+                key=lambda candidate: self._relisten_selection_key(
+                    candidate,
+                    selected_artist_keys=selected_artist_keys,
+                ),
+            )
+            selected.append(best_candidate)
+            remaining.remove(best_candidate)
+            if best_candidate.primary_artist_key is not None:
+                primary_artist_counts[best_candidate.primary_artist_key] = (
+                    primary_artist_counts.get(best_candidate.primary_artist_key, 0) + 1
+                )
+            selected_artist_keys.update(best_candidate.all_artist_keys)
+
+        return [candidate.entry for candidate in selected]
+
+    def _relisten_selection_key(
+        self,
+        candidate: _ScoredRelistenCandidate,
+        *,
+        selected_artist_keys: set[str],
+    ) -> tuple[float, int, int, int, float, float, str]:
+        secondary_overlap_count = sum(
+            1 for artist_key in candidate.secondary_artist_keys if artist_key in selected_artist_keys
+        )
+        adjusted_score = candidate.entry.score - secondary_overlap_count
+        return (
+            -adjusted_score,
+            -candidate.entry.score,
+            secondary_overlap_count,
+            self._artist_overlap_count(candidate.all_artist_keys, selected_artist_keys),
+            candidate.entry.monthly_listens if candidate.entry.monthly_listens is not None else -1,
+            candidate.entry.position if candidate.entry.position is not None else float("inf"),
+            candidate.entry.title.casefold(),
+        )
+
+    def _normalized_artist_keys(self, artists: list[str]) -> tuple[str, ...]:
+        normalized: list[str] = []
+        seen: set[str] = set()
+        for artist in artists:
+            cleaned = artist.strip().casefold()
+            if not cleaned or cleaned in seen:
+                continue
+            normalized.append(cleaned)
+            seen.add(cleaned)
+        return tuple(normalized)
+
+    def _artist_overlap_count(self, artist_keys: tuple[str, ...], selected_artist_keys: set[str]) -> int:
+        return sum(1 for artist_key in artist_keys if artist_key in selected_artist_keys)
+
     def _staleness_bonus(self, monthly_listens: int | None) -> int:
         if monthly_listens is None:
-            return 6
+            return 7
         if monthly_listens <= 0:
-            return 5
+            return 6
         if monthly_listens == 1:
             return 4
         if monthly_listens <= 3:

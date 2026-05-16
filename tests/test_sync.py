@@ -316,6 +316,194 @@ def test_relisten_recommendations_pass_archived_flag_to_exporter(monkeypatch) ->
     assert captured_flags == [True]
 
 
+def test_relisten_recommendations_limit_primary_artist_to_two_entries(monkeypatch) -> None:
+    service = SyncService(Settings.model_construct(yandex_music_token="token"))
+    tracks = [
+        SavedTrackInfo(
+            track_id="1",
+            title="Recent Artist A",
+            artists=["Artist A"],
+            tags=["indie"],
+            system_tags=["indie"],
+            user_tags=["night"],
+            monthly_listens=8,
+            source_position=1,
+        ),
+        SavedTrackInfo(
+            track_id="2",
+            title="Recent Artist B",
+            artists=["Artist B"],
+            tags=["ambient"],
+            system_tags=["ambient"],
+            user_tags=["focus"],
+            monthly_listens=7,
+            source_position=2,
+        ),
+        SavedTrackInfo(
+            track_id="3",
+            title="Old Artist A One",
+            artists=["Artist A"],
+            tags=["indie"],
+            system_tags=["indie"],
+            user_tags=["night"],
+            monthly_listens=0,
+            source_position=3,
+        ),
+        SavedTrackInfo(
+            track_id="4",
+            title="Old Artist A Two",
+            artists=["Artist A"],
+            tags=["indie"],
+            system_tags=["indie"],
+            user_tags=["night"],
+            monthly_listens=0,
+            source_position=4,
+        ),
+        SavedTrackInfo(
+            track_id="5",
+            title="Old Artist A Three",
+            artists=["Artist A"],
+            tags=["indie"],
+            system_tags=["indie"],
+            user_tags=["night"],
+            monthly_listens=0,
+            source_position=5,
+        ),
+        SavedTrackInfo(
+            track_id="6",
+            title="Old Artist B",
+            artists=["Artist B"],
+            tags=["ambient"],
+            system_tags=["ambient"],
+            user_tags=["focus"],
+            monthly_listens=0,
+            source_position=6,
+        ),
+    ]
+
+    monkeypatch.setattr(service.exporter, "recommendation_tracks", lambda *, include_archived: tracks)
+
+    recommendations = service.relisten_recommendations(include_archived=False)
+
+    artist_a_titles = [entry.title for entry in recommendations if entry.artists and entry.artists[0] == "Artist A"]
+    assert artist_a_titles == ["Old Artist A One", "Old Artist A Two"]
+    assert "Old Artist A Three" not in [entry.title for entry in recommendations]
+
+
+def test_relisten_recommendations_prefer_cleaner_collabs_on_ties(monkeypatch) -> None:
+    service = SyncService(Settings.model_construct(yandex_music_token="token"))
+    tracks = [
+        SavedTrackInfo(
+            track_id="1",
+            title="Recent Artist A",
+            artists=["Artist A", "Profile Guest A"],
+            tags=["indie"],
+            system_tags=["indie"],
+            user_tags=["night"],
+            monthly_listens=9,
+            source_position=1,
+        ),
+        SavedTrackInfo(
+            track_id="2",
+            title="Recent Artist B",
+            artists=["Artist B", "Profile Guest B"],
+            tags=["ambient"],
+            system_tags=["ambient"],
+            user_tags=["focus"],
+            monthly_listens=8,
+            source_position=2,
+        ),
+        SavedTrackInfo(
+            track_id="3",
+            title="Lead Candidate",
+            artists=["Artist C", "Shared Guest"],
+            tags=["indie", "ambient"],
+            system_tags=["indie", "ambient"],
+            user_tags=["night", "focus"],
+            monthly_listens=0,
+            source_position=3,
+        ),
+        SavedTrackInfo(
+            track_id="4",
+            title="Clean Candidate",
+            artists=["Artist D", "Fresh Guest"],
+            tags=["indie"],
+            system_tags=["indie"],
+            user_tags=["night"],
+            monthly_listens=0,
+            source_position=4,
+        ),
+        SavedTrackInfo(
+            track_id="5",
+            title="Overlap Candidate",
+            artists=["Artist E", "Shared Guest"],
+            tags=["indie"],
+            system_tags=["indie"],
+            user_tags=["night"],
+            monthly_listens=0,
+            source_position=5,
+        ),
+    ]
+
+    monkeypatch.setattr(service.exporter, "recommendation_tracks", lambda *, include_archived: tracks)
+
+    recommendations = service.relisten_recommendations(include_archived=False)
+
+    assert [entry.title for entry in recommendations] == ["Lead Candidate", "Clean Candidate", "Overlap Candidate"]
+
+
+def test_relisten_recommendations_balance_similarity_and_staleness(monkeypatch) -> None:
+    service = SyncService(Settings.model_construct(yandex_music_token="token"))
+    tracks = [
+        SavedTrackInfo(
+            track_id="1",
+            title="Recent Favorite",
+            artists=["Artist A"],
+            tags=["indie"],
+            system_tags=["indie"],
+            user_tags=["night"],
+            monthly_listens=9,
+            source_position=1,
+        ),
+        SavedTrackInfo(
+            track_id="2",
+            title="Second Favorite",
+            artists=["Artist B"],
+            tags=["ambient"],
+            system_tags=["ambient"],
+            user_tags=["focus"],
+            monthly_listens=8,
+            source_position=2,
+        ),
+        SavedTrackInfo(
+            track_id="3",
+            title="Artist Match Only",
+            artists=["Artist A"],
+            tags=["metal"],
+            system_tags=["metal"],
+            user_tags=[],
+            monthly_listens=None,
+            source_position=3,
+        ),
+        SavedTrackInfo(
+            track_id="4",
+            title="Stale Tag Match",
+            artists=["Artist C"],
+            tags=["ambient"],
+            system_tags=["ambient"],
+            user_tags=["focus"],
+            monthly_listens=None,
+            source_position=4,
+        ),
+    ]
+
+    monkeypatch.setattr(service.exporter, "recommendation_tracks", lambda *, include_archived: tracks)
+
+    recommendations = service.relisten_recommendations(include_archived=False)
+
+    assert [entry.title for entry in recommendations] == ["Stale Tag Match", "Artist Match Only"]
+
+
 def test_discovery_recommendations_mix_sources_and_save_results(monkeypatch) -> None:
     service = SyncService(Settings.model_construct(yandex_music_token="token"))
     liked_tracks = [
