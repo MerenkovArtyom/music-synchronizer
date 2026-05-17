@@ -11,6 +11,8 @@ import type {
   RecommendationRequest,
   SyncData,
   TopListenRequest,
+  VaultData,
+  VaultRequest,
 } from "./contracts.js";
 
 export interface MusicSyncBridge {
@@ -21,4 +23,5 @@ export interface MusicSyncBridge {
   getDashboard: () => Promise<BackendEnvelope<DashboardData>>;
   getRecommendations: (request: RecommendationRequest) => Promise<BackendEnvelope<RecommendationData>>;
   getDiscoveryRecommendations: (request: DiscoveryRequest) => Promise<BackendEnvelope<DiscoveryData>>;
+  getVaultView: (request: VaultRequest) => Promise<BackendEnvelope<VaultData>>;
 }

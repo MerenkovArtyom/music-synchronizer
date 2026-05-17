@@ -290,6 +290,7 @@ uv run pytest tests/test_yandex_client.py -v
 
 - это оболочка над общим Python app-backend;
 - текущий backend для Electron по умолчанию запускает `uv run music-sync-app`;
+- в desktop UI есть read-only раздел `Vault` для просмотра дерева `my_music` и preview заметок;
 - Electron-часть пока не заменяет и не дублирует основную логику синхронизации.
 
 Команды для Electron:

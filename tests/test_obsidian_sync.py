@@ -1,6 +1,8 @@
 from datetime import datetime, timezone
 from pathlib import Path
 
+import pytest
+
 from music_synchronizer.models import DiscoveryTrackInfo, TrackInfo
 from music_synchronizer.obsidian import ObsidianExporter
 
@@ -121,6 +123,85 @@ def test_remove_discovery_tracks_by_ids_removes_only_matching_notes(tmp_path: Pa
     assert removed == 1
     assert not (tmp_path / "recommendations" / "Discovery Song.md").exists()
     assert (tmp_path / "recommendations" / "Another Discovery.md").exists()
+
+
+def test_vault_view_lists_managed_music_directories_and_root_markdown(tmp_path: Path) -> None:
+    exporter = ObsidianExporter(tmp_path)
+    (tmp_path / "artists").mkdir()
+    (tmp_path / "tags").mkdir()
+    (tmp_path / "tracks").mkdir()
+    (tmp_path / "tracks" / "_removed").mkdir(parents=True)
+    (tmp_path / "recommendations").mkdir()
+    (tmp_path / "artists" / "Artist.md").write_text("# Artist\n", encoding="utf-8")
+    (tmp_path / "tags" / "Rock.md").write_text("# Rock\n", encoding="utf-8")
+    (tmp_path / "tracks" / "Liked.md").write_text("# Liked\n", encoding="utf-8")
+    (tmp_path / "tracks" / "_removed" / "Archived.md").write_text("# Archived\n", encoding="utf-8")
+    (tmp_path / "recommendations" / "Discovery.md").write_text("# Discovery\n", encoding="utf-8")
+    (tmp_path / "dashboard.md").write_text("# Dashboard\n", encoding="utf-8")
+    (tmp_path / ".music_sync_snapshot.json").write_text("{}", encoding="utf-8")
+    (tmp_path / "notes.txt").write_text("skip", encoding="utf-8")
+
+    payload = exporter.vault_view()
+
+    assert payload.vault_path == str(tmp_path)
+    assert payload.selected_path is None
+    assert payload.selected_note is None
+    assert [node.path for node in payload.tree] == [
+        "dashboard.md",
+        "artists",
+        "recommendations",
+        "tags",
+        "tracks",
+    ]
+    assert payload.tree[1].children is not None
+    assert [node.path for node in payload.tree[1].children] == ["artists/Artist.md"]
+    assert payload.tree[2].children is not None
+    assert [node.path for node in payload.tree[2].children] == ["recommendations/Discovery.md"]
+    assert payload.tree[3].children is not None
+    assert [node.path for node in payload.tree[3].children] == ["tags/Rock.md"]
+    assert payload.tree[4].children is not None
+    assert [node.path for node in payload.tree[4].children] == [
+        "tracks/_removed",
+        "tracks/Liked.md",
+    ]
+
+
+def test_vault_view_reads_selected_note_without_frontmatter(tmp_path: Path) -> None:
+    exporter = ObsidianExporter(tmp_path)
+    note_path = tmp_path / "tracks" / "Liked.md"
+    note_path.parent.mkdir(parents=True)
+    note_path.write_text(
+        "---\n"
+        'title: "Liked"\n'
+        "---\n"
+        "\n"
+        "# Liked\n"
+        "\n"
+        "Body text.\n",
+        encoding="utf-8",
+    )
+
+    payload = exporter.vault_view(selected_path="tracks/Liked.md")
+
+    assert payload.selected_path == "tracks/Liked.md"
+    assert payload.selected_note is not None
+    assert payload.selected_note.name == "Liked.md"
+    assert payload.selected_note.path == "tracks/Liked.md"
+    assert payload.selected_note.content == "# Liked\n\nBody text.\n"
+
+
+def test_vault_view_rejects_paths_outside_vault(tmp_path: Path) -> None:
+    exporter = ObsidianExporter(tmp_path)
+
+    with pytest.raises(ValueError, match="outside the configured vault"):
+        exporter.vault_view(selected_path="../secrets.md")
+
+
+def test_vault_view_fails_for_missing_selected_note(tmp_path: Path) -> None:
+    exporter = ObsidianExporter(tmp_path)
+
+    with pytest.raises(FileNotFoundError, match="Note not found"):
+        exporter.vault_view(selected_path="tracks/Missing.md")
 
 
 def test_dashboard_renders_discovery_recommendations_before_relisten_block(tmp_path: Path) -> None:

@@ -129,3 +129,41 @@ def test_backend_cli_discovery_passes_clear_flag(
     payload = json.loads(capsys.readouterr().out)
     assert payload["command"] == "discovery"
     assert payload["data"]["summary"]["cleared"] == 2
+
+
+def test_backend_cli_vault_passes_selected_path(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setenv("YANDEX_MUSIC_TOKEN", "token")
+    monkeypatch.setenv("OBSIDIAN_VAULT_PATH", str(tmp_path))
+
+    class FakeApp:
+        def run_command(self, command: str, **kwargs: object) -> dict[str, object]:
+            assert command == "vault"
+            assert kwargs == {"selected_path": "tracks/Liked.md"}
+            return {
+                "ok": True,
+                "command": "vault",
+                "data": {
+                    "vaultPath": str(tmp_path),
+                    "tree": [],
+                    "selectedPath": "tracks/Liked.md",
+                    "selectedNote": {
+                        "name": "Liked.md",
+                        "path": "tracks/Liked.md",
+                        "title": "Liked",
+                        "content": "# Liked\n",
+                    },
+                },
+            }
+
+    monkeypatch.setattr("music_synchronizer.backend_cli.MusicSyncApp", FakeApp)
+
+    exit_code = main(["vault", "--selected-path", "tracks/Liked.md"])
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["command"] == "vault"
+    assert payload["data"]["selectedPath"] == "tracks/Liked.md"

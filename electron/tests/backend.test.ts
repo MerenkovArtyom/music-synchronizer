@@ -10,6 +10,7 @@ import type {
   RecommendationData,
   RecommendationRequest,
   TopListenRequest,
+  VaultRequest,
 } from "../src/shared/contracts.js";
 import {
   BackendRunnerError,
@@ -238,6 +239,67 @@ test("normalizeBackendEnvelope accepts a machine-readable discovery envelope", (
   const discoveryData = envelope.data as DiscoveryData;
   assert.equal(discoveryData.summary.added, 1);
   assert.equal(discoveryData.recommendations[0]?.trackId, "10");
+});
+
+test("buildBackendInvocation appends vault selected path flag", () => {
+  const invocation = buildBackendInvocation("vault", ["--selected-path", "tracks/Liked.md"], {
+    MUSIC_SYNC_BACKEND_COMMAND: '["python", "-m", "music_synchronizer.backend_cli"]',
+    MUSIC_SYNC_REPO_ROOT: "/tmp/music-sync",
+  });
+
+  assert.equal(invocation.command, "python");
+  assert.deepEqual(invocation.args, [
+    "-m",
+    "music_synchronizer.backend_cli",
+    "vault",
+    "--selected-path",
+    "tracks/Liked.md",
+  ]);
+});
+
+test("normalizeBackendEnvelope accepts a machine-readable vault envelope", () => {
+  const envelope = normalizeBackendEnvelope("vault", {
+    stdout: JSON.stringify({
+      ok: true,
+      command: "vault",
+      data: {
+        vaultPath: "/tmp/vault",
+        tree: [
+          {
+            name: "tracks",
+            path: "tracks",
+            kind: "directory",
+            children: [
+              {
+                name: "Liked.md",
+                path: "tracks/Liked.md",
+                kind: "file",
+                children: null,
+              },
+            ],
+          },
+        ],
+        selectedPath: "tracks/Liked.md",
+        selectedNote: {
+          name: "Liked.md",
+          path: "tracks/Liked.md",
+          title: "Liked",
+          content: "# Liked\\n",
+        },
+      },
+    }),
+    stderr: "",
+    exitCode: 0,
+  }, {
+    selectedPath: "tracks/Liked.md",
+  } as VaultRequest);
+
+  assert.equal(envelope.ok, true);
+  if (!envelope.ok) {
+    throw new Error("expected success envelope");
+  }
+
+  assert.equal((envelope.data as { selectedPath: string }).selectedPath, "tracks/Liked.md");
 });
 
 test("normalizeBackendEnvelope surfaces backend error envelopes", () => {

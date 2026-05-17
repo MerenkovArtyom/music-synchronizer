@@ -15,6 +15,8 @@ import type {
   RecommendationRequest,
   SyncData,
   TopListenRequest,
+  VaultData,
+  VaultRequest,
 } from "../shared/contracts.js";
 
 type BackendData =
@@ -24,7 +26,8 @@ type BackendData =
   | MonthlyTopData
   | DashboardData
   | RecommendationData
-  | DiscoveryData;
+  | DiscoveryData
+  | VaultData;
 
 export interface BackendRuntimeEnv extends NodeJS.ProcessEnv {
   MUSIC_SYNC_BACKEND_COMMAND?: string;
@@ -82,7 +85,7 @@ function resolveCommandTokens(tokens: string[], cwd: string | undefined): string
 
 function buildRequestArgs(
   command: BackendCommand,
-  request?: ListTracksRequest | TopListenRequest | RecommendationRequest | DiscoveryRequest,
+  request?: ListTracksRequest | TopListenRequest | RecommendationRequest | DiscoveryRequest | VaultRequest,
 ): string[] {
   if (command === "list") {
     const listRequest = request as ListTracksRequest | undefined;
@@ -116,6 +119,14 @@ function buildRequestArgs(
       return [];
     }
     return ["--clear"];
+  }
+
+  if (command === "vault") {
+    const vaultRequest = request as VaultRequest | undefined;
+    if (!vaultRequest?.selectedPath) {
+      return [];
+    }
+    return ["--selected-path", vaultRequest.selectedPath];
   }
 
   return [];
@@ -217,7 +228,7 @@ export function buildBackendInvocation(
 export function normalizeBackendEnvelope(
   command: BackendCommand,
   result: BackendProcessResult,
-  request?: ListTracksRequest | TopListenRequest | RecommendationRequest | DiscoveryRequest,
+  request?: ListTracksRequest | TopListenRequest | RecommendationRequest | DiscoveryRequest | VaultRequest,
 ): BackendEnvelope<BackendData> {
   const trimmed = result.stdout.trim();
   if (trimmed === "") {
@@ -317,7 +328,7 @@ function runProcess(invocation: BackendInvocation, env: BackendRuntimeEnv): Prom
 
 export async function runBackendCommand(
   command: BackendCommand,
-  request: ListTracksRequest | TopListenRequest | RecommendationRequest | DiscoveryRequest | undefined,
+  request: ListTracksRequest | TopListenRequest | RecommendationRequest | DiscoveryRequest | VaultRequest | undefined,
   env: BackendRuntimeEnv,
   context: BackendRuntimeContext,
 ): Promise<BackendEnvelope<BackendData>> {

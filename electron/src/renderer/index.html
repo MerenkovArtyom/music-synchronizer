@@ -24,6 +24,7 @@
           <a href="#config-title">Config</a>
           <a href="#dashboard-title">Dashboard</a>
           <a href="#list-title">Library</a>
+          <a href="#vault-title">Vault</a>
           <a href="#monthly-top-title">Monthly Top</a>
           <a href="#discovery-title">Discovery</a>
           <a href="#recommend-title">Recommendations</a>
@@ -209,6 +210,41 @@
           </form>
           <div id="list-empty" class="empty-state">No query yet.</div>
           <ul id="track-results" class="results"></ul>
+        </section>
+
+        <section class="surface-card surface-card-wide" aria-labelledby="vault-title">
+          <div class="panel-head">
+            <div>
+              <p class="micro-label">Vault</p>
+              <h2 id="vault-title">Vault</h2>
+            </div>
+            <div class="panel-actions">
+              <span class="dark-pill">read only</span>
+              <button id="vault-load" class="button-primary" type="button">Load Vault</button>
+            </div>
+          </div>
+          <p class="panel-copy">
+            Browse the managed `my_music` notes tree and preview Markdown notes without editing them.
+          </p>
+          <p id="vault-path" class="dashboard-path"></p>
+          <div id="vault-empty" class="empty-state">No vault data loaded yet.</div>
+          <div class="vault-layout">
+            <aside class="vault-pane" aria-labelledby="vault-tree-title">
+              <div class="vault-pane-head">
+                <h3 id="vault-tree-title">Notes Tree</h3>
+              </div>
+              <div id="vault-tree" class="vault-tree"></div>
+            </aside>
+            <section class="vault-pane vault-preview-pane" aria-labelledby="vault-preview-title">
+              <div class="vault-pane-head">
+                <h3 id="vault-preview-title">Preview</h3>
+              </div>
+              <p id="vault-preview-meta" class="vault-preview-meta"></p>
+              <article id="vault-preview" class="vault-preview empty-state">
+                Select a note to preview it here.
+              </article>
+            </section>
+          </div>
         </section>
 
         <section class="surface-card surface-card-wide" aria-labelledby="monthly-top-title">

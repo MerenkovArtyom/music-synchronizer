@@ -18,6 +18,8 @@ def _build_parser() -> argparse.ArgumentParser:
     discovery_parser.add_argument("--clear", action="store_true")
     recommend_parser = subparsers.add_parser("recommend")
     recommend_parser.add_argument("--archived", action="store_true")
+    vault_parser = subparsers.add_parser("vault")
+    vault_parser.add_argument("--selected-path")
 
     list_parser = subparsers.add_parser("list")
     list_group = list_parser.add_mutually_exclusive_group(required=True)
@@ -47,6 +49,8 @@ def _payload_for_args(app: MusicSyncApp, args: argparse.Namespace) -> dict[str, 
         return app.run_command("list", kind="artist", value=args.artist)
     if args.command == "recommend":
         return app.run_command("recommend", include_archived=args.archived)
+    if args.command == "vault":
+        return app.run_command("vault", selected_path=args.selected_path)
 
     return app.run_command("top-listen", mode="most" if args.most else "least")
 

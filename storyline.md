@@ -189,3 +189,11 @@
 - `discovery --clear` очищает локальные рекомендации и удаляет discovery-playlist в Яндекс Музыке; fallback на удаление треков остаётся для клиентов без delete API.
 - Обычный `sync` больше не удаляет discovery-рекомендации и не трогает discovery-playlist.
 - README и тесты обновлены под новый контракт discovery.
+
+### Commit 28: add Vault browser to Electron app
+
+- В desktop-приложение добавлен read-only раздел `Vault` с деревом заметок и Markdown preview выбранного файла.
+- Python backend получил новую команду `vault`, которая безопасно отдаёт структуру `my_music` и содержимое выбранной заметки без YAML frontmatter.
+- В shared desktop contracts, preload bridge и Electron main-process добавлена сквозная поддержка нового `vault`-контракта.
+- Vault browser сначала охватил `dashboard.md`, `tracks/`, `tracks/_removed/` и `recommendations/`, а затем был расширен на существующие папки `artists/` и `tags/`.
+- README, `electron/README.md` и backend-тесты обновлены под новый сценарий просмотра заметок через приложение.

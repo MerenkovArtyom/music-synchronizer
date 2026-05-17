@@ -489,6 +489,140 @@ select {
   margin-top: 24px;
 }
 
+.vault-layout {
+  display: grid;
+  grid-template-columns: minmax(240px, 320px) minmax(0, 1fr);
+  gap: 18px;
+  margin-top: 20px;
+}
+
+.vault-pane {
+  min-height: 22rem;
+  padding: 18px;
+  border-radius: 14px;
+  background: rgba(17, 18, 20, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: var(--shadow-card);
+}
+
+.vault-pane-head {
+  margin-bottom: 14px;
+}
+
+.vault-pane-head h3 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.vault-tree {
+  display: grid;
+  gap: 8px;
+}
+
+.vault-tree details {
+  padding-left: 4px;
+}
+
+.vault-tree summary {
+  cursor: pointer;
+  color: var(--color-ash-50);
+}
+
+.vault-tree-children {
+  display: grid;
+  gap: 8px;
+  margin-top: 8px;
+  padding-left: 16px;
+}
+
+.vault-file-button {
+  width: 100%;
+  border: 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  text-align: left;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--color-snow);
+  cursor: pointer;
+}
+
+.vault-file-button:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.vault-file-button-active {
+  background: rgba(255, 99, 99, 0.16);
+  color: var(--color-ash-50);
+  box-shadow: inset 0 0 0 1px rgba(255, 99, 99, 0.2);
+}
+
+.vault-preview-meta {
+  margin: 0 0 16px;
+  color: var(--color-slate-200);
+  font-size: 13px;
+  font-family: "Geist Mono", "JetBrains Mono", "IBM Plex Mono", monospace;
+}
+
+.vault-preview {
+  color: var(--color-ash-50);
+  line-height: 1.7;
+  word-break: break-word;
+}
+
+.vault-preview h1,
+.vault-preview h2,
+.vault-preview h3 {
+  margin: 1.1em 0 0.4em;
+  line-height: 1.2;
+}
+
+.vault-preview h1:first-child,
+.vault-preview h2:first-child,
+.vault-preview h3:first-child,
+.vault-preview p:first-child {
+  margin-top: 0;
+}
+
+.vault-preview p,
+.vault-preview ul,
+.vault-preview pre,
+.vault-preview blockquote {
+  margin: 0 0 1em;
+}
+
+.vault-preview ul {
+  padding-left: 20px;
+}
+
+.vault-preview pre,
+.vault-preview code {
+  font-family: "Geist Mono", "JetBrains Mono", "IBM Plex Mono", monospace;
+}
+
+.vault-preview pre {
+  overflow-x: auto;
+  padding: 14px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.28);
+}
+
+.vault-preview blockquote {
+  margin-left: 0;
+  padding-left: 14px;
+  border-left: 3px solid rgba(255, 255, 255, 0.14);
+  color: var(--color-slate-200);
+}
+
+.vault-preview a {
+  color: #9dc6ff;
+}
+
+.vault-preview img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 12px;
+}
+
 .results {
   display: grid;
   gap: 12px;
@@ -551,6 +685,10 @@ select {
   }
 
   .top-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .vault-layout {
     grid-template-columns: 1fr;
   }
 }

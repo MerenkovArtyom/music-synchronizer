@@ -136,3 +136,27 @@ class DashboardData:
     top_artists: list[DashboardStatEntry]
     discovery_recommendations: list[DiscoveryTrackInfo] = field(default_factory=list)
     relisten_recommendations: list[RelistenRecommendationEntry] = field(default_factory=list)
+
+
+@dataclass(frozen=True, slots=True)
+class VaultTreeNode:
+    name: str
+    path: str
+    kind: str
+    children: list["VaultTreeNode"] | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class VaultNote:
+    name: str
+    path: str
+    title: str
+    content: str
+
+
+@dataclass(frozen=True, slots=True)
+class VaultData:
+    vault_path: str
+    tree: list[VaultTreeNode]
+    selected_path: str | None = None
+    selected_note: VaultNote | None = None

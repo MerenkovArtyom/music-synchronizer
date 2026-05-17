@@ -1,4 +1,4 @@
-export type BackendCommand = "show-config" | "sync" | "list" | "top-listen" | "dashboard" | "recommend" | "discovery";
+export type BackendCommand = "show-config" | "sync" | "list" | "top-listen" | "dashboard" | "recommend" | "discovery" | "vault";
 export type FilterKind = "tag" | "artist";
 export type TopListenMode = "most" | "least";
 
@@ -135,6 +135,29 @@ export interface DiscoveryData {
   }>;
 }
 
+export interface VaultTreeNode {
+  name: string;
+  path: string;
+  kind: "directory" | "file";
+  children: VaultTreeNode[] | null;
+}
+
+export interface VaultRequest {
+  selectedPath?: string;
+}
+
+export interface VaultData {
+  vaultPath: string;
+  tree: VaultTreeNode[];
+  selectedPath: string | null;
+  selectedNote: {
+    name: string;
+    path: string;
+    title: string;
+    content: string;
+  } | null;
+}
+
 export interface BackendErrorPayload {
   code: string;
   message: string;
@@ -174,4 +197,5 @@ export interface RendererApi {
   getDashboard: () => Promise<BackendEnvelope<DashboardData>>;
   getRecommendations: (request: RecommendationRequest) => Promise<BackendEnvelope<RecommendationData>>;
   getDiscoveryRecommendations: (request: DiscoveryRequest) => Promise<BackendEnvelope<DiscoveryData>>;
+  getVaultView: (request: VaultRequest) => Promise<BackendEnvelope<VaultData>>;
 }

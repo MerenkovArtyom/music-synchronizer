@@ -12,6 +12,9 @@ import type {
   RecommendationRequest,
   SyncData,
   TopListenRequest,
+  VaultData,
+  VaultRequest,
+  VaultTreeNode,
 } from "../shared/contracts.js";
 
 const statusBadge = document.querySelector<HTMLSpanElement>("#status-badge");
@@ -22,6 +25,7 @@ const dashboardButton = document.querySelector<HTMLButtonElement>("#dashboard-lo
 const dashboardInlineButton = document.querySelector<HTMLButtonElement>("#dashboard-load-inline");
 const listSubmitButton = document.querySelector<HTMLButtonElement>("#list-submit");
 const monthlyTopButton = document.querySelector<HTMLButtonElement>("#monthly-top-load");
+const vaultLoadButton = document.querySelector<HTMLButtonElement>("#vault-load");
 const discoveryLoadButton = document.querySelector<HTMLButtonElement>("#discovery-load");
 const discoveryClearButton = document.querySelector<HTMLButtonElement>("#discovery-clear");
 const discoveryEmpty = document.querySelector<HTMLElement>("#discovery-empty");
@@ -38,6 +42,11 @@ const filterKind = document.querySelector<HTMLSelectElement>("#filter-kind");
 const filterValue = document.querySelector<HTMLInputElement>("#filter-value");
 const listEmpty = document.querySelector<HTMLElement>("#list-empty");
 const trackResults = document.querySelector<HTMLUListElement>("#track-results");
+const vaultEmpty = document.querySelector<HTMLElement>("#vault-empty");
+const vaultPath = document.querySelector<HTMLElement>("#vault-path");
+const vaultTree = document.querySelector<HTMLElement>("#vault-tree");
+const vaultPreview = document.querySelector<HTMLElement>("#vault-preview");
+const vaultPreviewMeta = document.querySelector<HTMLElement>("#vault-preview-meta");
 const monthlyTopEmpty = document.querySelector<HTMLElement>("#monthly-top-empty");
 const mostPlayedResults = document.querySelector<HTMLUListElement>("#most-played-results");
 const leastPlayedResults = document.querySelector<HTMLUListElement>("#least-played-results");
@@ -78,6 +87,9 @@ function setBusy(isBusy: boolean): void {
   }
   if (monthlyTopButton) {
     monthlyTopButton.disabled = isBusy;
+  }
+  if (vaultLoadButton) {
+    vaultLoadButton.disabled = isBusy;
   }
   if (recommendButton) {
     recommendButton.disabled = isBusy;
@@ -145,6 +157,164 @@ function renderTracks(data: ListData): void {
       <span class="track-artists">${escapeHtml(track.artists.join(", ") || "Unknown Artist")}</span>
     `;
     trackResults.appendChild(item);
+  }
+}
+
+function renderVaultTreeNode(node: VaultTreeNode, selectedPath: string | null): HTMLElement {
+  if (node.kind === "file") {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = `vault-file-button${selectedPath === node.path ? " vault-file-button-active" : ""}`;
+    button.textContent = node.name;
+    button.addEventListener("click", () => {
+      void loadVault(node.path);
+    });
+    return button;
+  }
+
+  const details = document.createElement("details");
+  details.open = true;
+  const summary = document.createElement("summary");
+  summary.textContent = node.name;
+  details.appendChild(summary);
+
+  const children = document.createElement("div");
+  children.className = "vault-tree-children";
+  for (const child of node.children ?? []) {
+    children.appendChild(renderVaultTreeNode(child, selectedPath));
+  }
+  details.appendChild(children);
+  return details;
+}
+
+function renderMarkdownInline(text: string): string {
+  let rendered = escapeHtml(text);
+  rendered = rendered.replace(/!\[([^\]]*)\]\(([^)\s]+)\)/g, (_match, alt: string, url: string) => {
+    const safeUrl = sanitizeUrl(url);
+    if (safeUrl === null) {
+      return escapeHtml(`![${alt}](${url})`);
+    }
+    return `<img alt="${alt}" src="${safeUrl}" />`;
+  });
+  rendered = rendered.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (_match, label: string, url: string) => {
+    const safeUrl = sanitizeUrl(url);
+    if (safeUrl === null) {
+      return escapeHtml(`[${label}](${url})`);
+    }
+    return `<a href="${safeUrl}" target="_blank" rel="noreferrer">${label}</a>`;
+  });
+  rendered = rendered.replace(/`([^`]+)`/g, "<code>$1</code>");
+  rendered = rendered.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+  rendered = rendered.replace(/\*([^*]+)\*/g, "<em>$1</em>");
+  return rendered;
+}
+
+function renderMarkdown(content: string): string {
+  const lines = content.replace(/\r\n/g, "\n").split("\n");
+  const html: string[] = [];
+  let index = 0;
+
+  while (index < lines.length) {
+    const line = lines[index] ?? "";
+
+    if (line.trim() === "") {
+      index += 1;
+      continue;
+    }
+
+    if (line.startsWith("```")) {
+      const codeLines: string[] = [];
+      index += 1;
+      while (index < lines.length && !(lines[index] ?? "").startsWith("```")) {
+        codeLines.push(lines[index] ?? "");
+        index += 1;
+      }
+      if (index < lines.length) {
+        index += 1;
+      }
+      html.push(`<pre><code>${escapeHtml(codeLines.join("\n"))}</code></pre>`);
+      continue;
+    }
+
+    const heading = line.match(/^(#{1,3})\s+(.*)$/);
+    if (heading) {
+      const level = heading[1].length;
+      html.push(`<h${level}>${renderMarkdownInline(heading[2])}</h${level}>`);
+      index += 1;
+      continue;
+    }
+
+    if (line.startsWith("> ")) {
+      const quoteLines: string[] = [];
+      while (index < lines.length && (lines[index] ?? "").startsWith("> ")) {
+        quoteLines.push((lines[index] ?? "").slice(2));
+        index += 1;
+      }
+      html.push(`<blockquote>${quoteLines.map((entry) => renderMarkdownInline(entry)).join("<br />")}</blockquote>`);
+      continue;
+    }
+
+    if (line.match(/^\s*-\s+/)) {
+      const items: string[] = [];
+      while (index < lines.length && (lines[index] ?? "").match(/^\s*-\s+/)) {
+        items.push((lines[index] ?? "").replace(/^\s*-\s+/, ""));
+        index += 1;
+      }
+      html.push(`<ul>${items.map((item) => `<li>${renderMarkdownInline(item)}</li>`).join("")}</ul>`);
+      continue;
+    }
+
+    const paragraphLines: string[] = [];
+    while (index < lines.length) {
+      const candidate = lines[index] ?? "";
+      if (
+        candidate.trim() === "" ||
+        candidate.startsWith("```") ||
+        candidate.startsWith("> ") ||
+        candidate.match(/^\s*-\s+/) ||
+        candidate.match(/^#{1,3}\s+/)
+      ) {
+        break;
+      }
+      paragraphLines.push(candidate);
+      index += 1;
+    }
+    html.push(`<p>${renderMarkdownInline(paragraphLines.join(" "))}</p>`);
+  }
+
+  return html.join("");
+}
+
+function renderVault(data: VaultData): void {
+  if (vaultPath) {
+    vaultPath.textContent = data.vaultPath;
+  }
+  if (vaultTree) {
+    vaultTree.innerHTML = "";
+    for (const node of data.tree) {
+      vaultTree.appendChild(renderVaultTreeNode(node, data.selectedPath));
+    }
+  }
+  if (vaultPreviewMeta) {
+    vaultPreviewMeta.textContent = data.selectedNote ? data.selectedNote.path : "";
+  }
+  if (vaultPreview) {
+    if (data.selectedNote) {
+      vaultPreview.classList.remove("empty-state");
+      vaultPreview.innerHTML = renderMarkdown(data.selectedNote.content);
+    } else {
+      vaultPreview.classList.add("empty-state");
+      vaultPreview.textContent = "Select a note to preview it here.";
+    }
+  }
+  if (vaultEmpty) {
+    if (data.tree.length === 0) {
+      vaultEmpty.textContent = "Managed vault folders are available, but there are no browsable Markdown notes yet.";
+    } else if (data.selectedNote) {
+      vaultEmpty.textContent = `Loaded vault view for ${data.vaultPath}.`;
+    } else {
+      vaultEmpty.textContent = "Vault loaded. Select a note from the tree to preview it.";
+    }
   }
 }
 
@@ -341,6 +511,19 @@ function escapeHtml(value: string): string {
     .replaceAll("'", "&#39;");
 }
 
+function sanitizeUrl(value: string): string | null {
+  try {
+    const url = new URL(value);
+    if (url.protocol === "http:" || url.protocol === "https:") {
+      return escapeHtml(url.toString());
+    }
+  } catch {
+    return null;
+  }
+
+  return null;
+}
+
 async function loadConfig(): Promise<void> {
   setBusy(true);
   updateStatus("busy", "Loading", "Reading Python backend configuration.");
@@ -470,6 +653,36 @@ async function loadMonthlyTop(): Promise<void> {
   setBusy(false);
 }
 
+async function loadVault(selectedPath?: string): Promise<void> {
+  const request: VaultRequest = {};
+  if (selectedPath) {
+    request.selectedPath = selectedPath;
+  }
+
+  setBusy(true);
+  updateStatus("busy", "Vault", "Loading the managed vault tree from the Python backend.");
+
+  const result = await window.musicSync.getVaultView(request);
+  if (result.ok) {
+    renderVault(result.data);
+    updateStatus("success", "Vault", "Vault browser loaded from local note data.");
+  } else {
+    if (vaultEmpty) {
+      vaultEmpty.textContent = "Vault request failed.";
+    }
+    if (vaultPreview) {
+      vaultPreview.classList.add("empty-state");
+      vaultPreview.textContent = "Unable to preview the selected note.";
+    }
+    if (vaultPreviewMeta) {
+      vaultPreviewMeta.textContent = "";
+    }
+    updateStatus("error", "Vault Error", errorSummary(result));
+  }
+
+  setBusy(false);
+}
+
 async function loadRecommendations(): Promise<void> {
   const request: RecommendationRequest = {
     archived: Boolean(recommendArchived?.checked),
@@ -552,6 +765,10 @@ listForm?.addEventListener("submit", (event) => {
 
 monthlyTopButton?.addEventListener("click", () => {
   void loadMonthlyTop();
+});
+
+vaultLoadButton?.addEventListener("click", () => {
+  void loadVault();
 });
 
 recommendButton?.addEventListener("click", () => {

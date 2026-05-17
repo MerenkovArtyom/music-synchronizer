@@ -18,6 +18,9 @@ from music_synchronizer.models import (
     SyncSummary,
     TrackDashboardEntry,
     TrackInfo,
+    VaultData,
+    VaultNote,
+    VaultTreeNode,
 )
 
 
@@ -38,7 +41,9 @@ class TrackSnapshot:
 class ObsidianExporter:
     def __init__(self, vault_path: Path) -> None:
         self.vault_path = vault_path
+        self.artists_dir = vault_path / "artists"
         self.recommendations_dir = vault_path / "recommendations"
+        self.tags_dir = vault_path / "tags"
         self.tracks_dir = vault_path / "tracks"
         self.removed_dir = self.tracks_dir / "_removed"
         self.snapshot_path = vault_path / ".music_sync_snapshot.json"
@@ -224,6 +229,20 @@ class ObsidianExporter:
             if track is not None:
                 tracks.append(track)
         return tracks
+
+    def vault_view(self, *, selected_path: str | None = None) -> VaultData:
+        selected_note = None
+        normalized_selected_path = None
+        if selected_path is not None:
+            normalized_selected_path = self._normalize_vault_selected_path(selected_path)
+            selected_note = self._read_vault_note(normalized_selected_path)
+
+        return VaultData(
+            vault_path=str(self.vault_path),
+            tree=self._build_vault_tree(),
+            selected_path=normalized_selected_path,
+            selected_note=selected_note,
+        )
 
     def save_discovery_tracks(self, tracks: list[DiscoveryTrackInfo]) -> DiscoverySummary:
         self.vault_path.mkdir(parents=True, exist_ok=True)
@@ -581,6 +600,99 @@ class ObsidianExporter:
             return None
 
         return match.group(1)
+
+    def _strip_frontmatter(self, content: str) -> str:
+        return re.sub(r"^---\n.*?\n---(?:\n|$)", "", content, count=1, flags=re.DOTALL)
+
+    def _build_vault_tree(self) -> list[VaultTreeNode]:
+        nodes: list[VaultTreeNode] = []
+        for path in sorted(self.vault_path.glob("*.md")):
+            nodes.append(self._build_vault_file_node(path))
+
+        for directory in self._browsable_vault_directories():
+            if not directory.exists():
+                continue
+            node = self._build_vault_directory_node(directory)
+            if node is not None:
+                nodes.append(node)
+
+        return nodes
+
+    def _build_vault_directory_node(self, directory: Path) -> VaultTreeNode | None:
+        children: list[VaultTreeNode] = []
+        for child in sorted(directory.iterdir(), key=lambda item: (item.is_file(), item.name.casefold())):
+            if child.name.startswith("."):
+                continue
+            if child.is_dir():
+                nested = self._build_vault_directory_node(child)
+                if nested is not None:
+                    children.append(nested)
+                continue
+            if child.suffix != ".md":
+                continue
+            children.append(self._build_vault_file_node(child))
+
+        if not children:
+            return None
+
+        return VaultTreeNode(
+            name=directory.name,
+            path=directory.relative_to(self.vault_path).as_posix(),
+            kind="directory",
+            children=children,
+        )
+
+    def _build_vault_file_node(self, path: Path) -> VaultTreeNode:
+        return VaultTreeNode(
+            name=path.name,
+            path=path.relative_to(self.vault_path).as_posix(),
+            kind="file",
+        )
+
+    def _normalize_vault_selected_path(self, selected_path: str) -> str:
+        candidate = (self.vault_path / selected_path).resolve()
+        vault_root = self.vault_path.resolve()
+        try:
+            relative = candidate.relative_to(vault_root)
+        except ValueError as error:
+            raise ValueError("Selected note path points outside the configured vault.") from error
+
+        normalized_path = relative.as_posix()
+        if not self._is_vault_path_browsable(normalized_path):
+            raise ValueError("Selected note path points outside the configured vault.")
+        return normalized_path
+
+    def _is_vault_path_browsable(self, relative_path: str) -> bool:
+        if "/" not in relative_path and relative_path.endswith(".md"):
+            return True
+        for directory in self._browsable_vault_directories():
+            directory_name = directory.relative_to(self.vault_path).as_posix()
+            if relative_path == directory_name or relative_path.startswith(f"{directory_name}/"):
+                return True
+        return False
+
+    def _browsable_vault_directories(self) -> tuple[Path, ...]:
+        return (
+            self.artists_dir,
+            self.recommendations_dir,
+            self.tags_dir,
+            self.tracks_dir,
+        )
+
+    def _read_vault_note(self, normalized_path: str) -> VaultNote:
+        path = self.vault_path / normalized_path
+        if not path.exists() or not path.is_file() or path.suffix != ".md":
+            raise FileNotFoundError(f"Note not found: {normalized_path}")
+
+        content = path.read_text(encoding="utf-8")
+        body = self._strip_frontmatter(content).lstrip("\n")
+        title = self._read_frontmatter_value(content, "title") or path.stem
+        return VaultNote(
+            name=path.name,
+            path=normalized_path,
+            title=title,
+            content=body,
+        )
 
     def _normalize_tags(self, *tag_groups: list[str]) -> list[str]:
         normalized: list[str] = []

@@ -13,10 +13,11 @@ from music_synchronizer.models import (
     RelistenRecommendationEntry,
     SavedTrackInfo,
     TrackDashboardEntry,
+    VaultData,
 )
 from music_synchronizer.sync import SyncService
 
-BackendCommand = Literal["show-config", "sync", "dashboard", "list", "top-listen", "recommend", "discovery"]
+BackendCommand = Literal["show-config", "sync", "dashboard", "list", "top-listen", "recommend", "discovery", "vault"]
 TopListenMode = Literal["most", "least"]
 ListFilterKind = Literal["tag", "artist"]
 
@@ -205,6 +206,10 @@ class MusicSyncApp:
             "recommendations": [_discovery_track_payload(entry) for entry in entries],
         }
 
+    def vault(self, *, selected_path: str | None) -> dict[str, Any]:
+        payload = self.service.exporter.vault_view(selected_path=selected_path)
+        return _camelize_structure(payload)
+
     def run_command(self, command: BackendCommand, **kwargs: Any) -> dict[str, Any]:
         try:
             data = self._dispatch(command, **kwargs)
@@ -238,6 +243,8 @@ class MusicSyncApp:
             return self.recommend(include_archived=kwargs["include_archived"])
         if command == "discovery":
             return self.discovery(clear=kwargs["clear"])
+        if command == "vault":
+            return self.vault(selected_path=kwargs.get("selected_path"))
         return self.top_listen(mode=kwargs["mode"])
 
     def _dashboard_summary_payload(self, dashboard: DashboardData) -> dict[str, Any]:
@@ -284,4 +291,6 @@ def _error_code(command: BackendCommand) -> str:
         return "RECOMMEND_FAILED"
     if command == "discovery":
         return "DISCOVERY_FAILED"
+    if command == "vault":
+        return "VAULT_FAILED"
     return "TOP_LISTEN_FAILED"

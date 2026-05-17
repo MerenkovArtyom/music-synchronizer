@@ -11,6 +11,9 @@ from music_synchronizer.models import (
     DiscoveryTrackInfo,
     MonthlyTopEntry,
     TrackDashboardEntry,
+    VaultData,
+    VaultNote,
+    VaultTreeNode,
 )
 
 
@@ -225,6 +228,52 @@ def test_clear_discovery_returns_machine_readable_data(monkeypatch: pytest.Monke
             "total": 0,
         },
         "recommendations": [],
+    }
+
+
+def test_vault_returns_machine_readable_data(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    app = MusicSyncApp(settings=_settings(tmp_path))
+    vault_data = VaultData(
+        vault_path=str(tmp_path),
+        tree=[
+            VaultTreeNode(name="tracks", path="tracks", kind="directory", children=[
+                VaultTreeNode(name="Liked.md", path="tracks/Liked.md", kind="file")
+            ]),
+        ],
+        selected_path="tracks/Liked.md",
+        selected_note=VaultNote(
+            name="Liked.md",
+            path="tracks/Liked.md",
+            title="Liked",
+            content="# Liked\n",
+        ),
+    )
+    monkeypatch.setattr(app.service.exporter, "vault_view", lambda *, selected_path=None: vault_data)
+
+    assert app.vault(selected_path="tracks/Liked.md") == {
+        "vaultPath": str(tmp_path),
+        "tree": [
+            {
+                "name": "tracks",
+                "path": "tracks",
+                "kind": "directory",
+                "children": [
+                    {
+                        "name": "Liked.md",
+                        "path": "tracks/Liked.md",
+                        "kind": "file",
+                        "children": None,
+                    }
+                ],
+            }
+        ],
+        "selectedPath": "tracks/Liked.md",
+        "selectedNote": {
+            "name": "Liked.md",
+            "path": "tracks/Liked.md",
+            "title": "Liked",
+            "content": "# Liked\n",
+        },
     }
 
 
