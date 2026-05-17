@@ -204,7 +204,7 @@ def test_vault_view_fails_for_missing_selected_note(tmp_path: Path) -> None:
         exporter.vault_view(selected_path="tracks/Missing.md")
 
 
-def test_dashboard_renders_discovery_recommendations_before_relisten_block(tmp_path: Path) -> None:
+def test_dashboard_omits_discovery_and_relisten_recommendation_sections(tmp_path: Path) -> None:
     exporter = ObsidianExporter(tmp_path)
     synced_at = datetime(2026, 4, 24, 12, 0, tzinfo=timezone.utc)
 
@@ -212,11 +212,9 @@ def test_dashboard_renders_discovery_recommendations_before_relisten_block(tmp_p
     exporter.save_discovery_tracks([_discovery_track("201", "Discovery Song", sources=["similar"])])
     dashboard = (tmp_path / "dashboard.md").read_text(encoding="utf-8")
 
-    discovery_index = dashboard.index("## Discovery Recommendations")
-    relisten_index = dashboard.index("## Re-listen Recommendations")
-
-    assert discovery_index < relisten_index
-    assert "1. Discovery Song - Artist (similar)" in dashboard
+    assert "## Discovery Recommendations" not in dashboard
+    assert "## Re-listen Recommendations" not in dashboard
+    assert "Discovery Song - Artist (similar)" not in dashboard
 
 
 def test_export_moves_removed_tracks_to_archive(tmp_path: Path) -> None:
@@ -912,7 +910,7 @@ def test_recommendation_tracks_reads_active_by_default_and_archive_with_flag(tmp
     assert [track.title for track in with_archived] == ["Active", "Archived"]
 
 
-def test_dashboard_file_includes_relisten_recommendations_section(tmp_path: Path) -> None:
+def test_dashboard_file_omits_relisten_recommendations_section(tmp_path: Path) -> None:
     exporter = ObsidianExporter(tmp_path)
     synced_at = datetime(2026, 4, 24, 12, 0, tzinfo=timezone.utc)
 
@@ -950,5 +948,5 @@ def test_dashboard_file_includes_relisten_recommendations_section(tmp_path: Path
 
     dashboard_content = (tmp_path / "dashboard.md").read_text(encoding="utf-8")
 
-    assert "## Re-listen Recommendations" in dashboard_content
-    assert "1. Old Match - Artist A" in dashboard_content
+    assert "## Re-listen Recommendations" not in dashboard_content
+    assert "1. Old Match - Artist A" not in dashboard_content

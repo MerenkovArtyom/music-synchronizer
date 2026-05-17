@@ -1,506 +1,134 @@
-import type {
-  BackendEnvelope,
-  ConfigData,
-  DiscoveryData,
-  DiscoveryRequest,
-  DashboardData,
-  FilterKind,
-  ListData,
-  ListTracksRequest,
-  MonthlyTopData,
-  RecommendationData,
-  RecommendationRequest,
-  SyncData,
-  TopListenRequest,
-  VaultData,
-  VaultRequest,
-  VaultTreeNode,
-} from "../shared/contracts.js";
+import type { BackendEnvelope, VaultData } from "../shared/contracts.js";
+import {
+  createRendererController,
+  type AppSection,
+  type DashboardView,
+  type DiscoveryView,
+  type RendererState,
+  sectionLayoutMode,
+  type TrackView,
+} from "./shell-controller.js";
 
+const appShell = document.querySelector<HTMLElement>(".app-shell");
 const statusBadge = document.querySelector<HTMLSpanElement>("#status-badge");
 const statusMessage = document.querySelector<HTMLParagraphElement>("#status-message");
-const refreshConfigButton = document.querySelector<HTMLButtonElement>("#refresh-config");
-const runSyncButton = document.querySelector<HTMLButtonElement>("#run-sync");
-const dashboardButton = document.querySelector<HTMLButtonElement>("#dashboard-load");
-const dashboardInlineButton = document.querySelector<HTMLButtonElement>("#dashboard-load-inline");
-const listSubmitButton = document.querySelector<HTMLButtonElement>("#list-submit");
-const monthlyTopButton = document.querySelector<HTMLButtonElement>("#monthly-top-load");
-const vaultLoadButton = document.querySelector<HTMLButtonElement>("#vault-load");
-const discoveryLoadButton = document.querySelector<HTMLButtonElement>("#discovery-load");
-const discoveryClearButton = document.querySelector<HTMLButtonElement>("#discovery-clear");
-const discoveryEmpty = document.querySelector<HTMLElement>("#discovery-empty");
-const discoveryResults = document.querySelector<HTMLUListElement>("#discovery-results");
-const configDetails = document.querySelector<HTMLElement>("#config-details");
-const syncSummary = document.querySelector<HTMLElement>("#sync-summary");
-const dashboardEmpty = document.querySelector<HTMLElement>("#dashboard-empty");
-const dashboardPath = document.querySelector<HTMLElement>("#dashboard-path");
-const dashboardSummary = document.querySelector<HTMLElement>("#dashboard-summary");
-const dashboardTopTags = document.querySelector<HTMLUListElement>("#dashboard-top-tags");
-const dashboardTopArtists = document.querySelector<HTMLUListElement>("#dashboard-top-artists");
-const listForm = document.querySelector<HTMLFormElement>("#list-form");
-const filterKind = document.querySelector<HTMLSelectElement>("#filter-kind");
-const filterValue = document.querySelector<HTMLInputElement>("#filter-value");
+const navItems = Array.from(document.querySelectorAll<HTMLButtonElement>("[data-section]"));
+const listKicker = document.querySelector<HTMLElement>("#list-kicker");
+const listHeading = document.querySelector<HTMLElement>("#list-heading");
+const listSubtitle = document.querySelector<HTMLElement>("#list-subtitle");
 const listEmpty = document.querySelector<HTMLElement>("#list-empty");
-const trackResults = document.querySelector<HTMLUListElement>("#track-results");
-const vaultEmpty = document.querySelector<HTMLElement>("#vault-empty");
-const vaultPath = document.querySelector<HTMLElement>("#vault-path");
-const vaultTree = document.querySelector<HTMLElement>("#vault-tree");
-const vaultPreview = document.querySelector<HTMLElement>("#vault-preview");
-const vaultPreviewMeta = document.querySelector<HTMLElement>("#vault-preview-meta");
-const monthlyTopEmpty = document.querySelector<HTMLElement>("#monthly-top-empty");
-const mostPlayedResults = document.querySelector<HTMLUListElement>("#most-played-results");
-const leastPlayedResults = document.querySelector<HTMLUListElement>("#least-played-results");
-const recommendButton = document.querySelector<HTMLButtonElement>("#recommend-load");
-const recommendArchived = document.querySelector<HTMLInputElement>("#recommend-archived");
-const recommendEmpty = document.querySelector<HTMLElement>("#recommend-empty");
-const recommendResults = document.querySelector<HTMLUListElement>("#recommend-results");
+const listContent = document.querySelector<HTMLElement>("#list-content");
+const viewerPlaceholder = document.querySelector<HTMLElement>("#viewer-placeholder");
+const placeholderTitle = document.querySelector<HTMLElement>("#placeholder-title");
+const placeholderBody = document.querySelector<HTMLElement>("#placeholder-body");
+const metaPlaceholder = document.querySelector<HTMLElement>("#meta-placeholder");
 
-function updateStatus(
-  state: "idle" | "busy" | "success" | "error",
-  badgeText: string,
-  message: string,
-): void {
-  if (!statusBadge || !statusMessage) {
-    return;
-  }
+const dashboardView = document.querySelector<HTMLElement>("#dashboard-view");
+const dashboardTab = document.querySelector<HTMLElement>("#dashboard-tab");
+const dashboardTitle = document.querySelector<HTMLElement>("#dashboard-title");
+const dashboardNote = document.querySelector<HTMLElement>("#dashboard-note");
+const dashboardMeta = document.querySelector<HTMLElement>("#dashboard-meta");
+const dashboardMetaList = document.querySelector<HTMLElement>("#dashboard-meta-list");
+const dashboardTopTags = document.querySelector<HTMLElement>("#dashboard-top-tags");
+const dashboardTopArtists = document.querySelector<HTMLElement>("#dashboard-top-artists");
 
-  statusBadge.textContent = badgeText;
-  statusBadge.className = `badge badge-${state}`;
-  statusMessage.textContent = message;
-}
+const songView = document.querySelector<HTMLElement>("#song-view");
+const songTab = document.querySelector<HTMLElement>("#song-tab");
+const songTitle = document.querySelector<HTMLElement>("#song-title");
+const songFacts = document.querySelector<HTMLElement>("#song-facts");
+const songLink = document.querySelector<HTMLAnchorElement>("#song-link");
+const songCoverFrame = document.querySelector<HTMLElement>("#song-cover-frame");
+const songCover = document.querySelector<HTMLImageElement>("#song-cover");
+const songNote = document.querySelector<HTMLElement>("#song-note");
+const songMeta = document.querySelector<HTMLElement>("#song-meta");
+const songMetaList = document.querySelector<HTMLElement>("#song-meta-list");
+const songSystemTags = document.querySelector<HTMLElement>("#song-system-tags");
+const songUserTags = document.querySelector<HTMLElement>("#song-user-tags");
 
-function setBusy(isBusy: boolean): void {
-  if (refreshConfigButton) {
-    refreshConfigButton.disabled = isBusy;
-  }
-  if (runSyncButton) {
-    runSyncButton.disabled = isBusy;
-  }
-  if (dashboardButton) {
-    dashboardButton.disabled = isBusy;
-  }
-  if (dashboardInlineButton) {
-    dashboardInlineButton.disabled = isBusy;
-  }
-  if (listSubmitButton) {
-    listSubmitButton.disabled = isBusy;
-  }
-  if (monthlyTopButton) {
-    monthlyTopButton.disabled = isBusy;
-  }
-  if (vaultLoadButton) {
-    vaultLoadButton.disabled = isBusy;
-  }
-  if (recommendButton) {
-    recommendButton.disabled = isBusy;
-  }
-  if (discoveryLoadButton) {
-    discoveryLoadButton.disabled = isBusy;
-  }
-  if (discoveryClearButton) {
-    discoveryClearButton.disabled = isBusy;
-  }
-}
-
-function setConfigDetails(data: ConfigData["config"]): void {
-  if (!configDetails) {
-    return;
-  }
-
-  configDetails.innerHTML = [
-    ["Token", data.yandexMusicTokenPresent ? "Present" : "Missing"],
-    ["Vault", data.obsidianVaultPath],
-    ["Log level", data.logLevel],
-  ]
-    .map(
-      ([label, value]) =>
-        `<div><dt>${escapeHtml(label)}</dt><dd>${escapeHtml(String(value))}</dd></div>`,
-    )
-    .join("");
-}
-
-function setSyncSummary(summary: SyncData["summary"]): void {
-  if (!syncSummary) {
-    return;
-  }
-
-  syncSummary.innerHTML = [
-    ["Added", summary.added],
-    ["Unchanged", summary.unchanged],
-    ["Archived", summary.archived],
-    ["Removed", summary.removed],
-  ]
-    .map(
-      ([label, value]) =>
-        `<div><dt>${escapeHtml(String(label))}</dt><dd>${escapeHtml(String(value))}</dd></div>`,
-    )
-    .join("");
-}
-
-function renderTracks(data: ListData): void {
-  if (!trackResults || !listEmpty) {
-    return;
-  }
-
-  trackResults.innerHTML = "";
-
-  if (data.tracks.length === 0) {
-    listEmpty.textContent = `No active tracks found for ${data.filter.kind} "${data.filter.value}".`;
-    return;
-  }
-
-  listEmpty.textContent = `${data.tracks.length} active track(s) matched ${data.filter.kind} "${data.filter.value}".`;
-  for (const track of data.tracks) {
-    const item = document.createElement("li");
-    item.innerHTML = `
-      <span class="track-title">${escapeHtml(track.title)}</span>
-      <span class="track-artists">${escapeHtml(track.artists.join(", ") || "Unknown Artist")}</span>
-    `;
-    trackResults.appendChild(item);
-  }
-}
-
-function renderVaultTreeNode(node: VaultTreeNode, selectedPath: string | null): HTMLElement {
-  if (node.kind === "file") {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = `vault-file-button${selectedPath === node.path ? " vault-file-button-active" : ""}`;
-    button.textContent = node.name;
-    button.addEventListener("click", () => {
-      void loadVault(node.path);
-    });
-    return button;
-  }
-
-  const details = document.createElement("details");
-  details.open = true;
-  const summary = document.createElement("summary");
-  summary.textContent = node.name;
-  details.appendChild(summary);
-
-  const children = document.createElement("div");
-  children.className = "vault-tree-children";
-  for (const child of node.children ?? []) {
-    children.appendChild(renderVaultTreeNode(child, selectedPath));
-  }
-  details.appendChild(children);
-  return details;
-}
-
-function renderMarkdownInline(text: string): string {
-  let rendered = escapeHtml(text);
-  rendered = rendered.replace(/!\[([^\]]*)\]\(([^)\s]+)\)/g, (_match, alt: string, url: string) => {
-    const safeUrl = sanitizeUrl(url);
-    if (safeUrl === null) {
-      return escapeHtml(`![${alt}](${url})`);
-    }
-    return `<img alt="${alt}" src="${safeUrl}" />`;
-  });
-  rendered = rendered.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (_match, label: string, url: string) => {
-    const safeUrl = sanitizeUrl(url);
-    if (safeUrl === null) {
-      return escapeHtml(`[${label}](${url})`);
-    }
-    return `<a href="${safeUrl}" target="_blank" rel="noreferrer">${label}</a>`;
-  });
-  rendered = rendered.replace(/`([^`]+)`/g, "<code>$1</code>");
-  rendered = rendered.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
-  rendered = rendered.replace(/\*([^*]+)\*/g, "<em>$1</em>");
-  return rendered;
-}
-
-function renderMarkdown(content: string): string {
-  const lines = content.replace(/\r\n/g, "\n").split("\n");
-  const html: string[] = [];
-  let index = 0;
-
-  while (index < lines.length) {
-    const line = lines[index] ?? "";
-
-    if (line.trim() === "") {
-      index += 1;
-      continue;
-    }
-
-    if (line.startsWith("```")) {
-      const codeLines: string[] = [];
-      index += 1;
-      while (index < lines.length && !(lines[index] ?? "").startsWith("```")) {
-        codeLines.push(lines[index] ?? "");
-        index += 1;
-      }
-      if (index < lines.length) {
-        index += 1;
-      }
-      html.push(`<pre><code>${escapeHtml(codeLines.join("\n"))}</code></pre>`);
-      continue;
-    }
-
-    const heading = line.match(/^(#{1,3})\s+(.*)$/);
-    if (heading) {
-      const level = heading[1].length;
-      html.push(`<h${level}>${renderMarkdownInline(heading[2])}</h${level}>`);
-      index += 1;
-      continue;
-    }
-
-    if (line.startsWith("> ")) {
-      const quoteLines: string[] = [];
-      while (index < lines.length && (lines[index] ?? "").startsWith("> ")) {
-        quoteLines.push((lines[index] ?? "").slice(2));
-        index += 1;
-      }
-      html.push(`<blockquote>${quoteLines.map((entry) => renderMarkdownInline(entry)).join("<br />")}</blockquote>`);
-      continue;
-    }
-
-    if (line.match(/^\s*-\s+/)) {
-      const items: string[] = [];
-      while (index < lines.length && (lines[index] ?? "").match(/^\s*-\s+/)) {
-        items.push((lines[index] ?? "").replace(/^\s*-\s+/, ""));
-        index += 1;
-      }
-      html.push(`<ul>${items.map((item) => `<li>${renderMarkdownInline(item)}</li>`).join("")}</ul>`);
-      continue;
-    }
-
-    const paragraphLines: string[] = [];
-    while (index < lines.length) {
-      const candidate = lines[index] ?? "";
-      if (
-        candidate.trim() === "" ||
-        candidate.startsWith("```") ||
-        candidate.startsWith("> ") ||
-        candidate.match(/^\s*-\s+/) ||
-        candidate.match(/^#{1,3}\s+/)
-      ) {
-        break;
-      }
-      paragraphLines.push(candidate);
-      index += 1;
-    }
-    html.push(`<p>${renderMarkdownInline(paragraphLines.join(" "))}</p>`);
-  }
-
-  return html.join("");
-}
-
-function renderVault(data: VaultData): void {
-  if (vaultPath) {
-    vaultPath.textContent = data.vaultPath;
-  }
-  if (vaultTree) {
-    vaultTree.innerHTML = "";
-    for (const node of data.tree) {
-      vaultTree.appendChild(renderVaultTreeNode(node, data.selectedPath));
-    }
-  }
-  if (vaultPreviewMeta) {
-    vaultPreviewMeta.textContent = data.selectedNote ? data.selectedNote.path : "";
-  }
-  if (vaultPreview) {
-    if (data.selectedNote) {
-      vaultPreview.classList.remove("empty-state");
-      vaultPreview.innerHTML = renderMarkdown(data.selectedNote.content);
-    } else {
-      vaultPreview.classList.add("empty-state");
-      vaultPreview.textContent = "Select a note to preview it here.";
-    }
-  }
-  if (vaultEmpty) {
-    if (data.tree.length === 0) {
-      vaultEmpty.textContent = "Managed vault folders are available, but there are no browsable Markdown notes yet.";
-    } else if (data.selectedNote) {
-      vaultEmpty.textContent = `Loaded vault view for ${data.vaultPath}.`;
-    } else {
-      vaultEmpty.textContent = "Vault loaded. Select a note from the tree to preview it.";
-    }
-  }
-}
-
-function renderMonthlyTopList(
-  target: HTMLUListElement | null,
-  entries: MonthlyTopData["mostPlayed"],
-): void {
-  if (!target) {
-    return;
-  }
-
-  target.innerHTML = "";
-
-  for (const entry of entries) {
-    const item = document.createElement("li");
-    item.innerHTML = `
-      <span class="track-title">${escapeHtml(entry.title)}</span>
-      <span class="track-artists">${escapeHtml(entry.artists.join(", ") || "Unknown Artist")}</span>
-      <span class="track-meta">${escapeHtml(`Monthly listens: ${entry.monthlyListens} | Like position: ${entry.position}`)}</span>
-    `;
-    target.appendChild(item);
-  }
-}
-
-function renderMonthlyTop(data: MonthlyTopData): void {
-  renderMonthlyTopList(mostPlayedResults, data.mostPlayed);
-  renderMonthlyTopList(leastPlayedResults, data.leastPlayed);
-
-  if (!monthlyTopEmpty) {
-    return;
-  }
-
-  if (data.mostPlayed.length === 0 && data.leastPlayed.length === 0) {
-    monthlyTopEmpty.textContent = "No liked tracks available for the monthly top report.";
-    return;
-  }
-
-  monthlyTopEmpty.textContent = `Loaded ${data.mostPlayed.length} most-played and ${data.leastPlayed.length} least-played tracks.`;
-}
-
-function renderDashboardStatList(
-  target: HTMLUListElement | null,
-  items: string[],
-): void {
-  if (!target) {
-    return;
-  }
-
-  target.innerHTML = "";
-  for (const itemText of items) {
-    const item = document.createElement("li");
-    item.innerHTML = `<span class="track-title">${escapeHtml(itemText)}</span>`;
-    target.appendChild(item);
-  }
-}
-
-function renderDashboard(data: DashboardData): void {
-  if (dashboardPath) {
-    dashboardPath.textContent = data.path;
-  }
-
-  if (dashboardSummary) {
-    const { summary } = data;
-    dashboardSummary.innerHTML = [
-      ["Liked tracks", summary.likedTracks],
-      ["Removed tracks", summary.removedTracks],
-      ["Total tracks", summary.totalTracks],
-      ["Total duration", summary.totalDuration],
-      ["Known monthly listens", summary.monthlyListensKnown],
-      ["Coverage", `${summary.monthlyListensCoveragePercent.toFixed(2)}%`],
-      [
-        "Average monthly listens",
-        summary.averageMonthlyListens === null ? "-" : summary.averageMonthlyListens.toFixed(2),
-      ],
-      [
-        "Median monthly listens",
-        summary.medianMonthlyListens === null ? "-" : summary.medianMonthlyListens.toFixed(2),
-      ],
-      [
-        "Most listened track",
-        summary.mostListenedTrack
-          ? `${summary.mostListenedTrack.title} - ${summary.mostListenedTrack.artists.join(", ") || "Unknown Artist"} (${summary.mostListenedTrack.monthlyListens})`
-          : "-",
-      ],
-      [
-        "Most listened artist",
-        summary.mostListenedArtist
-          ? `${summary.mostListenedArtist.name} (${summary.mostListenedArtist.monthlyListens} listens, ${summary.mostListenedArtist.tracks} track${summary.mostListenedArtist.tracks === 1 ? "" : "s"})`
-          : "-",
-      ],
-      [
-        "Most used tag",
-        summary.mostUsedTag
-          ? `${summary.mostUsedTag.name} (${summary.mostUsedTag.tracks} track${summary.mostUsedTag.tracks === 1 ? "" : "s"})`
-          : "-",
-      ],
-      [
-        "Longest track",
-        summary.longestTrack
-          ? `${summary.longestTrack.title} - ${summary.longestTrack.artists.join(", ") || "Unknown Artist"} (${summary.longestTrack.duration})`
-          : "-",
-      ],
-    ]
-      .map(
-        ([label, value]) =>
-          `<div><dt>${escapeHtml(String(label))}</dt><dd>${escapeHtml(String(value))}</dd></div>`,
-      )
-      .join("");
-  }
-
-  renderDashboardStatList(
-    dashboardTopTags,
-    data.topTags.map((entry) => `${entry.name} (${entry.tracks} track${entry.tracks === 1 ? "" : "s"})`),
-  );
-  renderDashboardStatList(
-    dashboardTopArtists,
-    data.topArtists.map(
-      (entry) =>
-        `${entry.name} (${entry.monthlyListens} listens, ${entry.tracks} track${entry.tracks === 1 ? "" : "s"})`,
-    ),
-  );
-
-  if (dashboardEmpty) {
-    dashboardEmpty.textContent = `Loaded dashboard for ${data.summary.totalTracks} known track(s).`;
-  }
-}
-
-function renderRecommendations(data: RecommendationData): void {
-  if (!recommendResults || !recommendEmpty) {
-    return;
-  }
-
-  recommendResults.innerHTML = "";
-  if (data.recommendations.length === 0) {
-    recommendEmpty.textContent = "No recommendations found for the current local taste profile.";
-    return;
-  }
-
-  recommendEmpty.textContent = `Loaded ${data.recommendations.length} recommendation(s).`;
-  for (const entry of data.recommendations) {
-    const item = document.createElement("li");
-    item.innerHTML = `
-      <span class="track-title">${escapeHtml(entry.title)}</span>
-      <span class="track-artists">${escapeHtml(entry.artists.join(", ") || "Unknown Artist")}</span>
-      <span class="track-meta">${escapeHtml(`Monthly listens: ${entry.monthlyListens === null ? "-" : entry.monthlyListens} | Archived: ${entry.archived ? "yes" : "no"}`)}</span>
-      <span class="track-meta">${escapeHtml(entry.explain)}</span>
-    `;
-    recommendResults.appendChild(item);
-  }
-}
-
-function renderDiscovery(data: DiscoveryData, cleared: boolean): void {
-  if (!discoveryResults || !discoveryEmpty) {
-    return;
-  }
-
-  discoveryResults.innerHTML = "";
-  if (cleared) {
-    discoveryEmpty.textContent = `Cleared ${data.summary.cleared} recommendation(s).`;
-    return;
-  }
-
-  if (data.recommendations.length === 0) {
-    discoveryEmpty.textContent = "No discovery recommendations found for the current taste profile.";
-    return;
-  }
-
-  discoveryEmpty.textContent = `Loaded ${data.recommendations.length} discovery recommendation(s).`;
-  for (const entry of data.recommendations) {
-    const item = document.createElement("li");
-    item.innerHTML = `
-      <span class="track-title">${escapeHtml(entry.title)}</span>
-      <span class="track-artists">${escapeHtml(entry.artists.join(", ") || "Unknown Artist")}</span>
-      <span class="track-meta">${escapeHtml(`Monthly listens: ${entry.monthlyListens === null ? "-" : entry.monthlyListens} | Sources: ${entry.explain}`)}</span>
-    `;
-    discoveryResults.appendChild(item);
-  }
-}
+const recommendationView = document.querySelector<HTMLElement>("#recommendation-view");
+const recommendationTab = document.querySelector<HTMLElement>("#recommendation-tab");
+const recommendationTitle = document.querySelector<HTMLElement>("#recommendation-title");
+const recommendationSubtitle = document.querySelector<HTMLElement>("#recommendation-subtitle");
+const recommendationExplain = document.querySelector<HTMLElement>("#recommendation-explain");
+const recommendationLink = document.querySelector<HTMLAnchorElement>("#recommendation-link");
+const recommendationCoverFrame = document.querySelector<HTMLElement>("#recommendation-cover-frame");
+const recommendationCover = document.querySelector<HTMLImageElement>("#recommendation-cover");
+const recommendationNote = document.querySelector<HTMLElement>("#recommendation-note");
+const recommendationMeta = document.querySelector<HTMLElement>("#recommendation-meta");
+const recommendationMetaList = document.querySelector<HTMLElement>("#recommendation-meta-list");
+const recommendationSources = document.querySelector<HTMLElement>("#recommendation-sources");
+const recommendationTags = document.querySelector<HTMLElement>("#recommendation-tags");
 
 function errorSummary<T>(result: BackendEnvelope<T>): string {
   if (result.ok) {
     return "Unexpected success result.";
   }
-
   return `${result.error.code}: ${result.error.message}`;
 }
+
+function setBusy(isBusy: boolean): void {
+  document.body.dataset.busy = String(isBusy);
+  for (const navItem of navItems) {
+    navItem.disabled = isBusy;
+  }
+}
+
+function setStatus(tone: "idle" | "loading" | "success" | "placeholder" | "error", badge: string, message: string): void {
+  if (statusBadge) {
+    statusBadge.textContent = badge;
+    statusBadge.className = `status-badge status-${tone}`;
+  }
+  if (statusMessage) {
+    statusMessage.textContent = message;
+  }
+}
+
+async function expectVaultData(): Promise<VaultData> {
+  const result = await window.musicSync.getVaultView({});
+  if (!result.ok) {
+    throw new Error(errorSummary(result));
+  }
+  return result.data;
+}
+
+async function expectVaultSelection(selectedPath: string): Promise<VaultData> {
+  const result = await window.musicSync.getVaultView({ selectedPath });
+  if (!result.ok) {
+    throw new Error(errorSummary(result));
+  }
+  return result.data;
+}
+
+async function expectRecommendationsVault(request: { selectedPath?: string } = {}): Promise<VaultData> {
+  const result = await window.musicSync.getVaultView(request);
+  if (!result.ok) {
+    throw new Error(errorSummary(result));
+  }
+  return result.data;
+}
+
+async function expectDashboardData() {
+  const result = await window.musicSync.getDashboard();
+  if (!result.ok) {
+    throw new Error(errorSummary(result));
+  }
+  return result.data;
+}
+
+const controller = createRendererController({
+  getVaultView: async (request) => {
+    if (request.selectedPath) {
+      return await expectVaultSelection(request.selectedPath);
+    }
+    return await expectVaultData();
+  },
+  getRecommendationsVaultView: async (request) => {
+    return await expectRecommendationsVault(request);
+  },
+  getDashboardData: async () => {
+    return await expectDashboardData();
+  },
+});
 
 function escapeHtml(value: string): string {
   return value
@@ -511,276 +139,524 @@ function escapeHtml(value: string): string {
     .replaceAll("'", "&#39;");
 }
 
-function sanitizeUrl(value: string): string | null {
-  try {
-    const url = new URL(value);
-    if (url.protocol === "http:" || url.protocol === "https:") {
-      return escapeHtml(url.toString());
-    }
-  } catch {
-    return null;
-  }
-
-  return null;
+function renderMarkdownInline(text: string): string {
+  let rendered = escapeHtml(text);
+  rendered = rendered.replace(/!\[([^\]]*)\]\(([^)\s]+)\)/g, (_match, alt: string, url: string) => {
+    return `<img alt="${escapeHtml(alt)}" src="${escapeHtml(url)}" />`;
+  });
+  rendered = rendered.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (_match, label: string, url: string) => {
+    return `<a href="${escapeHtml(url)}" target="_blank" rel="noreferrer">${escapeHtml(label)}</a>`;
+  });
+  rendered = rendered.replace(/`([^`]+)`/g, "<code>$1</code>");
+  return rendered;
 }
 
-async function loadConfig(): Promise<void> {
-  setBusy(true);
-  updateStatus("busy", "Loading", "Reading Python backend configuration.");
+function renderMarkdown(content: string): string {
+  const lines = content.replace(/\r\n/g, "\n").split("\n");
+  const html: string[] = [];
+  let index = 0;
 
-  const result = await window.musicSync.showConfig();
-  if (result.ok) {
-    setConfigDetails(result.data.config);
-    updateStatus("success", "Ready", "Configuration loaded from the Python backend.");
+  while (index < lines.length) {
+    const line = lines[index] ?? "";
+    if (line.trim() === "") {
+      index += 1;
+      continue;
+    }
+    const heading = line.match(/^(#{1,3})\s+(.*)$/);
+    if (heading) {
+      const level = heading[1].length;
+      html.push(`<h${level}>${renderMarkdownInline(heading[2])}</h${level}>`);
+      index += 1;
+      continue;
+    }
+    if (line.startsWith("![")) {
+      html.push(`<p>${renderMarkdownInline(line)}</p>`);
+      index += 1;
+      continue;
+    }
+    const paragraph: string[] = [];
+    while (index < lines.length && (lines[index] ?? "").trim() !== "") {
+      paragraph.push(lines[index] ?? "");
+      index += 1;
+    }
+    html.push(`<p>${renderMarkdownInline(paragraph.join(" "))}</p>`);
+  }
+
+  return html.join("");
+}
+
+function renderFacts(target: HTMLElement | null, rows: Array<[string, string]>): void {
+  if (!target) {
+    return;
+  }
+  target.innerHTML = "";
+  for (const [label, value] of rows) {
+    const row = document.createElement("div");
+    row.className = "fact-row";
+
+    const labelNode = document.createElement("span");
+    labelNode.className = "fact-label";
+    labelNode.textContent = `${label}:`;
+
+    const valueNode = document.createElement("span");
+    valueNode.className = "fact-value";
+    valueNode.textContent = value;
+
+    row.append(labelNode, valueNode);
+    target.appendChild(row);
+  }
+}
+
+function renderMetaList(target: HTMLElement | null, items: Array<[string, string]>): void {
+  if (!target) {
+    return;
+  }
+  target.innerHTML = "";
+  for (const [label, value] of items) {
+    const row = document.createElement("div");
+    row.className = "meta-row";
+
+    const term = document.createElement("dt");
+    term.textContent = label;
+    const detail = document.createElement("dd");
+    detail.textContent = value;
+
+    row.append(term, detail);
+    target.appendChild(row);
+  }
+}
+
+function renderTagList(target: HTMLElement | null, tags: string[], emptyLabel: string): void {
+  if (!target) {
+    return;
+  }
+  target.innerHTML = "";
+  const values = tags.length > 0 ? tags : [emptyLabel];
+  for (const tag of values) {
+    const chip = document.createElement("span");
+    chip.className = "tag-pill";
+    chip.textContent = tags.length > 0 ? `#${tag}` : emptyLabel;
+    target.appendChild(chip);
+  }
+}
+
+function updateCover(frame: HTMLElement | null, image: HTMLImageElement | null, src: string, alt: string): void {
+  if (!frame || !image) {
+    return;
+  }
+  const hasImage = src.trim().length > 0 && src !== "—";
+  frame.hidden = !hasImage;
+  if (hasImage) {
+    image.src = src;
+    image.alt = alt;
   } else {
-    updateStatus("error", "Config Error", errorSummary(result));
+    image.removeAttribute("src");
   }
-
-  setBusy(false);
 }
 
-async function runSync(): Promise<void> {
-  setBusy(true);
-  updateStatus("busy", "Syncing", "Running synchronization through the Python backend.");
-
-  const result = await window.musicSync.runSync();
-  if (result.ok) {
-    setSyncSummary(result.data.summary);
-    updateStatus("success", "Synced", `Added ${result.data.summary.added} tracks.`);
-  } else {
-    updateStatus("error", "Sync Error", errorSummary(result));
-  }
-
-  setBusy(false);
-}
-
-async function loadDashboard(): Promise<void> {
-  setBusy(true);
-  updateStatus("busy", "Dashboard", "Loading the local dashboard from the Python backend.");
-
-  const result = await window.musicSync.getDashboard();
-  if (result.ok) {
-    renderDashboard(result.data);
-    updateStatus("success", "Dashboard", "Dashboard loaded from local vault data.");
-  } else {
-    if (dashboardEmpty) {
-      dashboardEmpty.textContent = "Dashboard request failed.";
-    }
-    if (dashboardPath) {
-      dashboardPath.textContent = "";
-    }
-    if (dashboardSummary) {
-      dashboardSummary.innerHTML = "";
-    }
-    if (dashboardTopTags) {
-      dashboardTopTags.innerHTML = "";
-    }
-    if (dashboardTopArtists) {
-      dashboardTopArtists.innerHTML = "";
-    }
-    updateStatus("error", "Dashboard Error", errorSummary(result));
-  }
-
-  setBusy(false);
-}
-
-async function handleList(event: SubmitEvent): Promise<void> {
-  event.preventDefault();
-
-  if (!filterKind || !filterValue) {
+function renderSongView(track: TrackView | null): void {
+  if (!track || !songView || !songMeta) {
     return;
   }
 
-  const request: ListTracksRequest = {
-    kind: filterKind.value as FilterKind,
-    value: filterValue.value.trim(),
-  };
-
-  setBusy(true);
-  updateStatus("busy", "Listing", "Querying active notes through the Python backend.");
-
-  const result = await window.musicSync.listTracks(request);
-  if (result.ok) {
-    renderTracks(result.data);
-    updateStatus("success", "Listed", `Loaded ${result.data.tracks.length} track result(s).`);
-  } else {
-    if (listEmpty) {
-      listEmpty.textContent = "List request failed.";
-    }
-    if (trackResults) {
-      trackResults.innerHTML = "";
-    }
-    updateStatus("error", "List Error", errorSummary(result));
+  if (songTab) {
+    songTab.textContent = track.path.split("/").pop() ?? track.title;
+  }
+  if (songTitle) {
+    songTitle.textContent = track.title;
   }
 
-  setBusy(false);
-}
-
-async function loadMonthlyTop(): Promise<void> {
-  setBusy(true);
-  updateStatus("busy", "Ranking", "Loading monthly listening leaders from the Python backend.");
-
-  const mostRequest: TopListenRequest = { mode: "most" };
-  const leastRequest: TopListenRequest = { mode: "least" };
-  const [mostResult, leastResult] = await Promise.all([
-    window.musicSync.getTopListen(mostRequest),
-    window.musicSync.getTopListen(leastRequest),
+  renderFacts(songFacts, [
+    ["Artists", track.artists.join(", ") || "—"],
+    ["Album", track.album],
+    ["Year", track.year],
+    ["Monthly listens (30d)", track.monthlyListens],
+    ["Duration", track.duration],
   ]);
 
-  if (mostResult.ok && leastResult.ok) {
-    renderMonthlyTop({
-      mostPlayed: mostResult.data.mostPlayed,
-      leastPlayed: leastResult.data.leastPlayed,
-    });
-    updateStatus("success", "Ranked", "Monthly top report loaded from the Python backend.");
-  } else {
-    if (monthlyTopEmpty) {
-      monthlyTopEmpty.textContent = "Monthly top request failed.";
-    }
-    if (mostPlayedResults) {
-      mostPlayedResults.innerHTML = "";
-    }
-    if (leastPlayedResults) {
-      leastPlayedResults.innerHTML = "";
-    }
-    updateStatus(
-      "error",
-      "Ranking Error",
-      errorSummary(mostResult.ok ? leastResult : mostResult),
-    );
+  if (songLink) {
+    songLink.href = track.yandexUrl || "#";
+    songLink.textContent = track.yandexUrl ? "Открыть в Yandex Music" : "Ссылка недоступна";
+    songLink.toggleAttribute("aria-disabled", !track.yandexUrl);
+  }
+  updateCover(songCoverFrame, songCover, track.coverUrl, track.title);
+  if (songNote) {
+    songNote.innerHTML = renderMarkdown(track.noteBody);
   }
 
-  setBusy(false);
+  renderMetaList(songMetaList, [
+    ["Артист", track.artists.join(", ") || "—"],
+    ["Альбом", track.album],
+    ["Год", track.year],
+    ["Длительность", track.duration],
+    ["Прослушивания (30д)", track.monthlyListens],
+    ["Статус", track.archived ? "Архив" : "Активна"],
+    ["Track ID", track.trackId],
+    ["Путь", track.path],
+  ]);
+  renderTagList(songSystemTags, track.systemTags, "Нет системных тегов");
+  renderTagList(songUserTags, track.userTags, "Нет пользовательских тегов");
 }
 
-async function loadVault(selectedPath?: string): Promise<void> {
-  const request: VaultRequest = {};
-  if (selectedPath) {
-    request.selectedPath = selectedPath;
+function renderRecommendationView(view: DiscoveryView | null): void {
+  if (!view || !recommendationView || !recommendationMeta) {
+    return;
   }
 
-  setBusy(true);
-  updateStatus("busy", "Vault", "Loading the managed vault tree from the Python backend.");
-
-  const result = await window.musicSync.getVaultView(request);
-  if (result.ok) {
-    renderVault(result.data);
-    updateStatus("success", "Vault", "Vault browser loaded from local note data.");
-  } else {
-    if (vaultEmpty) {
-      vaultEmpty.textContent = "Vault request failed.";
-    }
-    if (vaultPreview) {
-      vaultPreview.classList.add("empty-state");
-      vaultPreview.textContent = "Unable to preview the selected note.";
-    }
-    if (vaultPreviewMeta) {
-      vaultPreviewMeta.textContent = "";
-    }
-    updateStatus("error", "Vault Error", errorSummary(result));
+  if (recommendationTab) {
+    recommendationTab.textContent = `${view.title}.md`;
+  }
+  if (recommendationTitle) {
+    recommendationTitle.textContent = view.title;
+  }
+  if (recommendationSubtitle) {
+    recommendationSubtitle.textContent = view.artists.join(", ") || "—";
+  }
+  if (recommendationExplain) {
+    recommendationExplain.textContent = view.explain;
+  }
+  if (recommendationLink) {
+    recommendationLink.href = view.yandexUrl || "#";
+  }
+  updateCover(recommendationCoverFrame, recommendationCover, view.coverUrl, view.title);
+  if (recommendationNote) {
+    recommendationNote.innerHTML = renderMarkdown(view.noteBody);
   }
 
-  setBusy(false);
+  renderMetaList(recommendationMetaList, [
+    ["Артист", view.artists.join(", ") || "—"],
+    ["Альбом", view.album],
+    ["Год", view.year],
+    ["Длительность", view.duration],
+    ["Прослушивания (30д)", view.monthlyListens],
+    ["Track ID", view.id],
+  ]);
+  renderTagList(recommendationSources, view.sources, "Нет источников");
+  renderTagList(recommendationTags, view.systemTags, "Нет тегов");
 }
 
-async function loadRecommendations(): Promise<void> {
-  const request: RecommendationRequest = {
-    archived: Boolean(recommendArchived?.checked),
-  };
-
-  setBusy(true);
-  updateStatus("busy", "Recommend", "Loading local re-listen recommendations from the Python backend.");
-
-  const result = await window.musicSync.getRecommendations(request);
-  if (result.ok) {
-    renderRecommendations(result.data);
-    updateStatus("success", "Recommend", "Recommendation report loaded from local vault data.");
-  } else {
-    if (recommendEmpty) {
-      recommendEmpty.textContent = "Recommendation request failed.";
-    }
-    if (recommendResults) {
-      recommendResults.innerHTML = "";
-    }
-    updateStatus("error", "Recommend Error", errorSummary(result));
+function renderDashboardView(view: DashboardView | null): void {
+  if (!view || !dashboardView || !dashboardMeta) {
+    return;
   }
 
-  setBusy(false);
-}
+  if (dashboardTab) {
+    dashboardTab.textContent = view.path.replace(/\.md$/i, "");
+  }
+  if (dashboardTitle) {
+    dashboardTitle.textContent = view.title || "dashboard";
+  }
+  if (dashboardNote) {
+    dashboardNote.innerHTML = renderMarkdown(view.noteBody);
+  }
 
-async function loadDiscovery(clear: boolean): Promise<void> {
-  const request: DiscoveryRequest = { clear };
-
-  setBusy(true);
-  updateStatus(
-    "busy",
-    clear ? "Clearing" : "Discovery",
-    clear
-      ? "Clearing saved discovery recommendations from the Python backend."
-      : "Loading discovery recommendations from the Python backend.",
+  renderMetaList(dashboardMetaList, [
+    ["Лайкнутые треки", String(view.summary.likedTracks)],
+    ["Удалённые треки", String(view.summary.removedTracks)],
+    ["Всего треков", String(view.summary.totalTracks)],
+    ["Общая длительность", view.summary.totalDuration],
+    ["Покрытие прослушиваний", `${view.summary.monthlyListensKnown}/${view.summary.likedTracks} (${view.summary.monthlyListensCoveragePercent.toFixed(2)}%)`],
+    ["Среднее за месяц", view.summary.averageMonthlyListens === null ? "—" : view.summary.averageMonthlyListens.toFixed(2)],
+    ["Медиана за месяц", view.summary.medianMonthlyListens === null ? "—" : view.summary.medianMonthlyListens.toFixed(2)],
+  ]);
+  renderTagList(
+    dashboardTopTags,
+    view.topTags.map((entry) => `${entry.name} (${entry.tracks})`),
+    "Нет тегов",
   );
-
-  const result = await window.musicSync.getDiscoveryRecommendations(request);
-  if (result.ok) {
-    renderDiscovery(result.data, clear);
-    updateStatus(
-      "success",
-      clear ? "Cleared" : "Discovery",
-      clear
-        ? "Discovery recommendations cleared."
-        : "Discovery recommendations loaded from the Python backend.",
-    );
-  } else {
-    if (discoveryEmpty) {
-      discoveryEmpty.textContent = clear ? "Discovery clear request failed." : "Discovery request failed.";
-    }
-    if (discoveryResults) {
-      discoveryResults.innerHTML = "";
-    }
-    updateStatus("error", "Discovery Error", errorSummary(result));
-  }
-
-  setBusy(false);
+  renderTagList(
+    dashboardTopArtists,
+    view.topArtists.map((entry) => `${entry.name} (${entry.tracks})`),
+    "Нет артистов",
+  );
 }
 
-refreshConfigButton?.addEventListener("click", () => {
-  void loadConfig();
-});
+function renderSongsList(state: RendererState): void {
+  if (!listContent || !listEmpty) {
+    return;
+  }
 
-runSyncButton?.addEventListener("click", () => {
-  void runSync();
-});
+  const activeItems = state.songItems.filter((item) => !item.archived);
+  const archivedItems = state.songItems.filter((item) => item.archived);
+  listContent.innerHTML = "";
 
-dashboardButton?.addEventListener("click", () => {
-  void loadDashboard();
-});
+  if (state.songItems.length === 0) {
+    listEmpty.hidden = false;
+    listEmpty.textContent = "В папке `tracks/` пока нет заметок.";
+    return;
+  }
 
-dashboardInlineButton?.addEventListener("click", () => {
-  void loadDashboard();
-});
+  listEmpty.hidden = true;
+  for (const [title, items] of [
+    ["Активные", activeItems],
+    ["Архив", archivedItems],
+  ] as const) {
+    if (items.length === 0) {
+      continue;
+    }
+    const group = document.createElement("section");
+    group.className = "list-group";
 
-listForm?.addEventListener("submit", (event) => {
-  void handleList(event);
-});
+    const header = document.createElement("h3");
+    header.className = "list-group-title";
+    header.textContent = title;
+    group.appendChild(header);
 
-monthlyTopButton?.addEventListener("click", () => {
-  void loadMonthlyTop();
-});
+    for (const item of items) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = `list-item${item.path === state.selectedSongPath ? " is-selected" : ""}`;
+      button.addEventListener("click", () => {
+        void selectSong(item.path);
+      });
 
-vaultLoadButton?.addEventListener("click", () => {
-  void loadVault();
-});
+      const label = document.createElement("span");
+      label.className = "list-item-title";
+      label.textContent = item.label;
+      button.appendChild(label);
+      group.appendChild(button);
+    }
 
-recommendButton?.addEventListener("click", () => {
-  void loadRecommendations();
-});
+    listContent.appendChild(group);
+  }
+}
 
-discoveryLoadButton?.addEventListener("click", () => {
-  void loadDiscovery(false);
-});
+function renderRecommendationsList(state: RendererState): void {
+  if (!listContent || !listEmpty) {
+    return;
+  }
 
-discoveryClearButton?.addEventListener("click", () => {
-  void loadDiscovery(true);
-});
+  listContent.innerHTML = "";
+  if (state.recommendationItems.length === 0) {
+    listEmpty.hidden = false;
+    listEmpty.textContent = "Нет доступных рекомендаций.";
+    return;
+  }
 
-void loadConfig();
+  listEmpty.hidden = true;
+  const group = document.createElement("section");
+  group.className = "list-group";
+
+  for (const item of state.recommendationItems) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = `list-item${item.id === state.selectedRecommendationId ? " is-selected" : ""}`;
+    button.addEventListener("click", () => {
+      void openRecommendation(item.id);
+    });
+
+    const title = document.createElement("span");
+    title.className = "list-item-title";
+    title.textContent = item.title;
+    const subtitle = document.createElement("span");
+    subtitle.className = "list-item-subtitle";
+    subtitle.textContent = item.subtitle;
+
+    button.append(title, subtitle);
+    group.appendChild(button);
+  }
+
+  listContent.appendChild(group);
+}
+
+function renderNavigation(activeSection: AppSection): void {
+  for (const navItem of navItems) {
+    const isActive = navItem.dataset.section === activeSection;
+    navItem.classList.toggle("is-active", isActive);
+  }
+}
+
+function renderPlaceholder(state: RendererState): void {
+  if (placeholderTitle) {
+    placeholderTitle.textContent = state.placeholderTitle || "Скоро будет";
+  }
+  if (placeholderBody) {
+    placeholderBody.textContent =
+      state.placeholderBody || "Для этого макета сейчас полноценно реализованы Dashboard, Песни и Рекомендации.";
+  }
+}
+
+function renderLayoutVisibility(state: RendererState): void {
+  const dashboardActive = state.activeSection === "dashboard" && state.dashboardView !== null;
+  const songActive = state.activeSection === "songs" && state.trackView !== null;
+  const recommendationActive =
+    state.activeSection === "recommendations" && state.recommendationView !== null;
+  const placeholderActive = !dashboardActive && !songActive && !recommendationActive;
+
+  if (viewerPlaceholder) {
+    viewerPlaceholder.hidden = !placeholderActive;
+  }
+  if (metaPlaceholder) {
+    metaPlaceholder.hidden = !placeholderActive;
+  }
+  if (songView) {
+    songView.hidden = !songActive;
+  }
+  if (dashboardView) {
+    dashboardView.hidden = !dashboardActive;
+  }
+  if (songMeta) {
+    songMeta.hidden = !songActive;
+  }
+  if (dashboardMeta) {
+    dashboardMeta.hidden = !dashboardActive;
+  }
+  if (recommendationView) {
+    recommendationView.hidden = !recommendationActive;
+  }
+  if (recommendationMeta) {
+    recommendationMeta.hidden = !recommendationActive;
+  }
+}
+
+function renderShellMode(section: AppSection): void {
+  if (!appShell) {
+    return;
+  }
+
+  appShell.dataset.layout = sectionLayoutMode(section);
+}
+
+function renderSidebarCopy(state: RendererState): void {
+  if (!listHeading || !listSubtitle || !listKicker) {
+    return;
+  }
+
+  if (state.activeSection === "songs") {
+    listKicker.textContent = "Коллекция";
+    listHeading.textContent = "tracks/";
+    listSubtitle.textContent = "Локальные заметки из tracks/ и tracks/_removed/.";
+    return;
+  }
+
+  if (state.activeSection === "dashboard") {
+    listKicker.textContent = "Обзор";
+    listHeading.textContent = "dashboard.md";
+    listSubtitle.textContent = "Снимок библиотеки и сводные метрики.";
+    return;
+  }
+
+  if (state.activeSection === "recommendations") {
+    listKicker.textContent = "Discovery";
+    listHeading.textContent = "recommendations/";
+    listSubtitle.textContent = "Сетевые рекомендации из Yandex Music.";
+    return;
+  }
+
+  listKicker.textContent = "Раздел";
+  listHeading.textContent = state.placeholderTitle || "Скоро будет";
+  listSubtitle.textContent = state.placeholderBody || "Этот экран появится позже.";
+}
+
+function render(): void {
+  const state = controller.getState();
+  renderNavigation(state.activeSection);
+  renderShellMode(state.activeSection);
+  renderSidebarCopy(state);
+  renderLayoutVisibility(state);
+
+  if (state.activeSection === "songs") {
+    renderSongsList(state);
+    renderSongView(state.trackView);
+  } else if (state.activeSection === "dashboard") {
+    if (listContent) {
+      listContent.innerHTML = "";
+      const group = document.createElement("section");
+      group.className = "list-group";
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "list-item is-selected";
+      const title = document.createElement("span");
+      title.className = "list-item-title";
+      title.textContent = "dashboard.md";
+      button.appendChild(title);
+      group.appendChild(button);
+      listContent.appendChild(group);
+    }
+    if (listEmpty) {
+      listEmpty.hidden = true;
+    }
+    renderDashboardView(state.dashboardView);
+  } else if (state.activeSection === "recommendations") {
+    renderRecommendationsList(state);
+    renderRecommendationView(state.recommendationView);
+  } else {
+    if (listContent) {
+      listContent.innerHTML = "";
+    }
+    if (listEmpty) {
+      listEmpty.hidden = false;
+      listEmpty.textContent = "Этот раздел пока недоступен в текущем редизайне.";
+    }
+  }
+
+  renderPlaceholder(state);
+  setStatus(
+    state.status.tone,
+    state.activeSection === "songs"
+      ? "Песни"
+      : state.activeSection === "dashboard"
+        ? "Дэшборд"
+      : state.activeSection === "recommendations"
+        ? "Рекомы"
+        : "Скоро",
+    state.status.message,
+  );
+}
+
+async function activateSection(section: AppSection): Promise<void> {
+  const loadingMessage =
+    section === "songs"
+      ? "Загружаю локальные заметки..."
+      : section === "recommendations"
+        ? "Загружаю рекомендации..."
+        : "Открываю раздел...";
+  setBusy(true);
+  setStatus("loading", "Загрузка", loadingMessage);
+  try {
+    await controller.activateSection(section);
+    render();
+  } catch (error) {
+    setStatus("error", "Ошибка", error instanceof Error ? error.message : "Не удалось обновить экран");
+  } finally {
+    setBusy(false);
+  }
+}
+
+async function selectSong(path: string): Promise<void> {
+  setBusy(true);
+  setStatus("loading", "Загрузка", "Открываю заметку...");
+  try {
+    await controller.selectSong(path);
+    render();
+  } catch (error) {
+    setStatus("error", "Ошибка", error instanceof Error ? error.message : "Не удалось открыть заметку");
+  } finally {
+    setBusy(false);
+  }
+}
+
+async function openRecommendation(path: string): Promise<void> {
+  setBusy(true);
+  setStatus("loading", "Загрузка", "Открываю рекомендацию...");
+  try {
+    await controller.openRecommendation(path);
+    render();
+  } catch (error) {
+    setStatus("error", "Ошибка", error instanceof Error ? error.message : "Не удалось открыть рекомендацию");
+  } finally {
+    setBusy(false);
+  }
+}
+
+for (const navItem of navItems) {
+  navItem.addEventListener("click", () => {
+    const section = navItem.dataset.section as AppSection | undefined;
+    if (!section) {
+      return;
+    }
+    void activateSection(section);
+  });
+}
+
+void activateSection("songs");

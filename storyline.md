@@ -197,3 +197,18 @@
 - В shared desktop contracts, preload bridge и Electron main-process добавлена сквозная поддержка нового `vault`-контракта.
 - Vault browser сначала охватил `dashboard.md`, `tracks/`, `tracks/_removed/` и `recommendations/`, а затем был расширен на существующие папки `artists/` и `tags/`.
 - README, `electron/README.md` и backend-тесты обновлены под новый сценарий просмотра заметок через приложение.
+
+### Commit 29: redesign Electron app as a note-first desktop shell
+
+- Electron renderer полностью перестроен в постоянный desktop-shell с левой навигацией, списком заметок, центральным viewer и правой metadata-панелью.
+- Полноценно реализованы разделы `Песни`, `Рекомендации` и `Dashboard`, а остальные пункты меню пока оставлены как заглушки.
+- Экран `Песни` теперь читает локальные заметки из `tracks/` и `tracks/_removed/`, парсит frontmatter на клиенте и показывает содержимое заметки вместе с метаданными.
+- Экран `Рекомендации` переведён на просмотр локальной папки `recommendations/` через `vault`, без создания новых рекомендаций из UI.
+- Для renderer-слоя добавлен отдельный controller и тесты, а стили приведены к новому desktop-оформлению по макету.
+
+### Commit 30: simplify dashboard view and remove recommendation blocks
+
+- `dashboard.md` больше не включает разделы `Discovery Recommendations` и `Re-listen Recommendations`.
+- Dashboard в приложении переведён в более спокойный obsidian-like режим: без второй и четвёртой колонок, с упором на чтение самой заметки.
+- Заголовок и типографика dashboard-view в Electron подстроены под формат обычной vault-note, а не отдельной dashboard-card.
+- Python- и Electron-тесты обновлены под новый формат dashboard без recommendation-блоков.

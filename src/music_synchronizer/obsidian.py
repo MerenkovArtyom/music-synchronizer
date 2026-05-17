@@ -1117,43 +1117,8 @@ class ObsidianExporter:
                 "",
                 "## Longest Track",
                 self._render_longest_track_summary(dashboard.longest_track),
-                "",
-                "## Discovery Recommendations",
             ]
         )
-        if dashboard.discovery_recommendations:
-            lines.extend(
-                [
-                    (
-                        f"{index}. {entry.title} - "
-                        f"{', '.join(entry.artists) if entry.artists else 'Unknown Artist'} "
-                        f"({entry.explain})"
-                    )
-                    for index, entry in enumerate(dashboard.discovery_recommendations, start=1)
-                ]
-            )
-        else:
-            lines.append("- None")
-
-        lines.extend(
-            [
-                "",
-                "## Re-listen Recommendations",
-            ]
-        )
-        if dashboard.relisten_recommendations:
-            lines.extend(
-                [
-                    (
-                        f"{index}. {entry.title} - "
-                        f"{', '.join(entry.artists) if entry.artists else 'Unknown Artist'} "
-                        f"({entry.explain})"
-                    )
-                    for index, entry in enumerate(dashboard.relisten_recommendations, start=1)
-                ]
-            )
-        else:
-            lines.append("- None")
         lines.append("")
         return "\n".join(lines)
 
