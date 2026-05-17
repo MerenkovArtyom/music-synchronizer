@@ -1,10 +1,25 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 from importlib import import_module
 from typing import Any
 
 from music_synchronizer.models import DiscoveryTrackInfo, TrackInfo
+
+
+@dataclass(frozen=True, slots=True)
+class _PlaylistTrackEntry:
+    track_id: str
+    album_id: str | None
+    index: int
+
+
+@dataclass(frozen=True, slots=True)
+class _PlaylistReference:
+    playlist: Any
+    kind: Any
+    owner_uid: Any
 
 
 class YandexMusicClient:
@@ -127,6 +142,79 @@ class YandexMusicClient:
                 seen.add(normalized.track_id)
 
         return candidates
+
+    def sync_discovery_playlist(
+        self,
+        playlist_name: str,
+        tracks: list[DiscoveryTrackInfo],
+    ) -> None:
+        desired_pairs = self._playlist_track_pairs(tracks)
+        if not desired_pairs:
+            return
+
+        playlist = self._get_or_create_playlist(playlist_name)
+        existing_track_ids = {entry.track_id for entry in self._playlist_entries(playlist)}
+        api_client = None
+
+        for track_id, album_id in desired_pairs:
+            if track_id in existing_track_ids:
+                continue
+
+            resolved_album_id = album_id
+            if resolved_album_id is None:
+                if api_client is None:
+                    api_client = self._create_client()
+                resolved_album_id = self._resolve_album_id_for_track(api_client, track_id)
+
+            if resolved_album_id is None:
+                continue
+
+            updated_playlist = playlist.insert_track(
+                int(track_id),
+                int(resolved_album_id),
+                at=playlist.track_count or 0,
+            )
+            if updated_playlist is not None:
+                playlist = updated_playlist
+            existing_track_ids.add(track_id)
+
+    def remove_tracks_from_playlist(self, playlist_name: str, track_ids: set[str]) -> None:
+        if not track_ids:
+            return
+
+        playlist = self._find_playlist(playlist_name)
+        if playlist is None:
+            return
+
+        positions = [
+            entry.index
+            for entry in self._playlist_entries(playlist)
+            if entry.track_id in track_ids
+        ]
+        for position in sorted(positions, reverse=True):
+            updated_playlist = playlist.delete_tracks(position, position)
+            if updated_playlist is not None:
+                playlist = updated_playlist
+
+    def clear_playlist(self, playlist_name: str) -> None:
+        client = self._create_client()
+        reference = self._find_playlist_reference(client, playlist_name)
+        if reference is None:
+            return
+
+        if reference.kind is not None and reference.owner_uid is not None and hasattr(client, "users_playlists_delete"):
+            client.users_playlists_delete(reference.kind, user_id=reference.owner_uid)
+            return
+
+        playlist = reference.playlist
+        if reference.kind is not None and reference.owner_uid is not None and hasattr(client, "users_playlists"):
+            playlist = client.users_playlists(reference.kind, reference.owner_uid)
+
+        entries = self._playlist_entries(playlist)
+        for position in sorted((entry.index for entry in entries), reverse=True):
+            updated_playlist = playlist.delete_tracks(position, position)
+            if updated_playlist is not None:
+                playlist = updated_playlist
 
     def _create_client(self) -> Any:
         client_class = self._load_client_class()
@@ -259,6 +347,95 @@ class YandexMusicClient:
             return self._extract_track_candidates(response)
         return []
 
+    def _find_playlist(self, playlist_name: str) -> Any | None:
+        client = self._create_client()
+        reference = self._find_playlist_reference(client, playlist_name)
+        if reference is None:
+            return None
+        if reference.kind is None or reference.owner_uid is None or not hasattr(client, "users_playlists"):
+            return reference.playlist
+        return client.users_playlists(reference.kind, reference.owner_uid)
+
+    def _find_playlist_reference(self, client: Any, playlist_name: str) -> _PlaylistReference | None:
+        for playlist in client.users_playlists_list():
+            if getattr(playlist, "title", None) != playlist_name:
+                continue
+
+            kind = getattr(playlist, "kind", None)
+            owner = getattr(playlist, "owner", None)
+            owner_uid = getattr(owner, "uid", None)
+            return _PlaylistReference(playlist=playlist, kind=kind, owner_uid=owner_uid)
+        return None
+
+    def _get_or_create_playlist(self, playlist_name: str) -> Any:
+        playlist = self._find_playlist(playlist_name)
+        if playlist is not None:
+            return playlist
+
+        client = self._create_client()
+        created = client.users_playlists_create(playlist_name, visibility="private")
+        if created is None:
+            raise RuntimeError(f"Unable to create Yandex Music playlist: {playlist_name}")
+        return created
+
+    def _playlist_entries(self, playlist: Any) -> list[_PlaylistTrackEntry]:
+        entries: list[_PlaylistTrackEntry] = []
+        for index, track in enumerate(playlist.fetch_tracks()):
+            track_id = getattr(track, "id", None)
+            if track_id is None:
+                continue
+            normalized_track_id = str(track_id).strip()
+            if not normalized_track_id:
+                continue
+            album_id = getattr(track, "album_id", None)
+            normalized_album_id = None if album_id is None else str(album_id).strip() or None
+            entries.append(
+                _PlaylistTrackEntry(
+                    track_id=normalized_track_id,
+                    album_id=normalized_album_id,
+                    index=index,
+                )
+            )
+        return entries
+
+    def _playlist_track_pairs(self, tracks: list[DiscoveryTrackInfo]) -> list[tuple[str, str | None]]:
+        desired_pairs: list[tuple[str, str | None]] = []
+        seen: set[str] = set()
+        for track in tracks:
+            if track.track_id in seen:
+                continue
+            desired_pairs.append((track.track_id, track.album_id))
+            seen.add(track.track_id)
+        return desired_pairs
+
+    def _resolve_album_id_for_track(self, client: Any, track_id: str) -> str | None:
+        if not hasattr(client, "tracks"):
+            return None
+
+        try:
+            response = client.tracks([track_id])
+        except Exception:
+            return None
+
+        tracks = response if isinstance(response, list) else [response]
+        for track in tracks:
+            if track is None:
+                continue
+            normalized = str(getattr(track, "id", "")).strip()
+            if normalized and normalized != track_id:
+                continue
+
+            albums = getattr(track, "albums", []) or []
+            for album in albums:
+                album_id = getattr(album, "id", None)
+                if album_id is None:
+                    continue
+                normalized_album_id = str(album_id).strip()
+                if normalized_album_id:
+                    return normalized_album_id
+
+        return None
+
     def _extract_track_candidates(self, response: Any) -> list[Any]:
         candidates = [
             getattr(response, "tracks", None),
@@ -308,6 +485,7 @@ class YandexMusicClient:
             title=str(getattr(track, "title", "")),
             artists=artists,
             album=str(getattr(primary_album, "title", "") or ""),
+            album_id=None if album_id is None else str(album_id),
             system_tags=self._extract_tags(track, primary_album),
             year=self._extract_year(track, primary_album),
             cover_url=self._extract_cover_url(primary_album),

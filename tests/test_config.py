@@ -11,12 +11,25 @@ def test_settings_reads_token_and_obsidian_path(tmp_path: Path) -> None:
             "YANDEX_MUSIC_TOKEN": "test-token",
             "OBSIDIAN_VAULT_PATH": str(tmp_path),
             "LOG_LEVEL": "DEBUG",
+            "YANDEX_MUSIC_DISCOVERY_PLAYLIST_NAME": "My Discovery",
         }
     )
 
     assert settings.yandex_music_token == "test-token"
     assert settings.obsidian_vault_path == tmp_path
     assert settings.log_level == "DEBUG"
+    assert settings.discovery_playlist_name == "My Discovery"
+
+
+def test_settings_use_default_discovery_playlist_name(tmp_path: Path) -> None:
+    settings = Settings.model_validate(
+        {
+            "YANDEX_MUSIC_TOKEN": "test-token",
+            "OBSIDIAN_VAULT_PATH": str(tmp_path),
+        }
+    )
+
+    assert settings.discovery_playlist_name == "Рекомендации"
 
 
 def test_settings_load_dotenv_relative_to_project_root_when_cwd_differs(

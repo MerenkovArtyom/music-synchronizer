@@ -71,6 +71,7 @@ uv run music-sync sync
 ```env
 YANDEX_MUSIC_TOKEN=your-token-here
 OBSIDIAN_VAULT_PATH=/Users/your_name/Documents/my_music
+YANDEX_MUSIC_DISCOVERY_PLAYLIST_NAME=Рекомендации
 LOG_LEVEL=INFO
 ```
 
@@ -78,6 +79,7 @@ LOG_LEVEL=INFO
 
 - `YANDEX_MUSIC_TOKEN` — токен для API Яндекс Музыки.
 - `OBSIDIAN_VAULT_PATH` — путь до корня vault Obsidian.
+- `YANDEX_MUSIC_DISCOVERY_PLAYLIST_NAME` — имя playlist в Яндекс Музыке для discovery-рекомендаций. По умолчанию `Рекомендации`.
 - `LOG_LEVEL` — уровень логирования. По умолчанию `INFO`.
 
 Если `OBSIDIAN_VAULT_PATH` не задан, используется путь по умолчанию `~/Documents/my_music`.
@@ -110,8 +112,8 @@ uv run music-sync-app show-config
 - `uv run music-sync top-listen --least` — показывает top 10 локально сохранённых треков с самым маленьким `monthly_listens`.
 - `uv run music-sync recommend` — рекомендует похожие лайкнутые треки, которые давно не слушались.
 - `uv run music-sync recommend --archived` — то же самое, но дополнительно включает архив `tracks/_removed/`.
-- `uv run music-sync discovery` — получает новые сетевые рекомендации из Yandex Music и сохраняет их в `recommendations/`.
-- `uv run music-sync discovery --clear` — очищает папку `recommendations/`.
+- `uv run music-sync discovery` — получает новые сетевые рекомендации из Yandex Music, сохраняет их в `recommendations/` и добавляет в discovery-плейлист Яндекс Музыки.
+- `uv run music-sync discovery --clear` — очищает папку `recommendations/` и discovery-плейлист Яндекс Музыки.
 - `uv run music-sync list --tag "rock"` — ищет активные сохранённые треки по тегу.
 - `uv run music-sync list --artist "Artist Name"` — ищет активные сохранённые треки по артисту.
 - `uv run music-sync-app ...` — machine-readable backend entrypoint для desktop app; печатает JSON envelope вместо человекочитаемого текста.
@@ -160,9 +162,11 @@ uv run music-sync-app show-config
   - `tracks_similar` для самих сидов;
 - лайкнутые треки и дубликаты по `track_id` исключаются;
 - новые заметки пишутся в `recommendations/` в корне vault;
+- новые треки также добавляются в playlist Яндекс Музыки с именем из `YANDEX_MUSIC_DISCOVERY_PLAYLIST_NAME`;
+- если такого playlist ещё нет, команда создаёт его автоматически;
 - команда работает накопительно и не пересобирает папку целиком;
-- `sync` автоматически удаляет из `recommendations/` те треки, которые пользователь уже лайкнул;
-- `--clear` полностью очищает `recommendations/`.
+- `sync` не трогает сохранённые discovery-рекомендации;
+- `--clear` полностью очищает `recommendations/` и удаляет discovery-playlist в Яндекс Музыке.
 
 ## Как устроена синхронизация
 
@@ -172,9 +176,8 @@ uv run music-sync-app show-config
 2. пытается посчитать количество прослушиваний за последние 30 дней;
 3. создаёт или обновляет заметки в Obsidian;
 4. переносит исчезнувшие из лайков треки в архив;
-5. удаляет из `recommendations/` треки, которые теперь есть в лайках;
-6. обновляет локальный `dashboard.md`;
-7. сохраняет служебный снапшот в `.music_sync_snapshot.json`.
+5. обновляет локальный `dashboard.md`;
+6. сохраняет служебный снапшот в `.music_sync_snapshot.json`.
 
 Синхронизация ориентируется на `track_id`, а не на имя файла. Это важно: заметка может быть переименована при изменении названия трека или разрешении коллизии, но связь с треком остаётся стабильной.
 

@@ -496,6 +496,7 @@ class ObsidianExporter:
             title=title,
             artists=self._read_frontmatter_list(content, "artists"),
             album=self._read_frontmatter_value(content, "album") or "",
+            album_id=None,
             system_tags=self._read_frontmatter_list(content, "system_tags"),
             year=self._read_optional_frontmatter_int(content, "year"),
             cover_url=self._read_frontmatter_value(content, "cover_url") or "",

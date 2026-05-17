@@ -43,8 +43,6 @@ class SyncService:
         synced_at = datetime.now(timezone.utc)
         tracks = self.client.fetch_liked_tracks(reference_time=synced_at)
         summary = self.exporter.sync(tracks, synced_at=synced_at)
-        liked_track_ids = {track.track_id for track in tracks}
-        self.exporter.remove_discovery_tracks_by_ids(liked_track_ids)
         return summary
 
     def dashboard_data(self) -> DashboardData:
@@ -81,10 +79,16 @@ class SyncService:
         similar_candidates = self.client.fetch_similar_tracks(seed_track_ids, exclude_track_ids)
         recommendations = self._mix_discovery_candidates(popular_candidates, similar_candidates)
         summary = self.exporter.save_discovery_tracks(recommendations)
+        self.client.sync_discovery_playlist(
+            self.settings.discovery_playlist_name,
+            recommendations + existing_tracks,
+        )
         return recommendations, summary
 
     def clear_discovery_recommendations(self) -> DiscoverySummary:
-        return self.exporter.clear_discovery_tracks()
+        summary = self.exporter.clear_discovery_tracks()
+        self.client.clear_playlist(self.settings.discovery_playlist_name)
+        return summary
 
     def _build_top_listen_entries(
         self,

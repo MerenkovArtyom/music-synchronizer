@@ -31,6 +31,7 @@ class DiscoveryTrackInfo:
     cover_url: str
     duration_seconds: int
     yandex_url: str
+    album_id: str | None = None
     monthly_listens: int | None = None
     discovery_sources: list[str] = field(default_factory=list)
 

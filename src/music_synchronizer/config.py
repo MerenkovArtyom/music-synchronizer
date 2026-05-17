@@ -20,3 +20,7 @@ class Settings(BaseSettings):
         alias="OBSIDIAN_VAULT_PATH",
     )
     log_level: str = Field(default="INFO", alias="LOG_LEVEL")
+    discovery_playlist_name: str = Field(
+        default="Рекомендации",
+        alias="YANDEX_MUSIC_DISCOVERY_PLAYLIST_NAME",
+    )

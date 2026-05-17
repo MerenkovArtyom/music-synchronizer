@@ -499,3 +499,164 @@ def test_fetch_similar_tracks_merges_duplicate_sources_and_skips_invalid(
 
     assert [track.track_id for track in tracks] == ["20"]
     assert tracks[0].discovery_sources == ["similar"]
+
+
+def test_sync_discovery_playlist_resolves_album_id_from_track_lookup(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = YandexMusicClient(token="token")
+    insert_calls: list[tuple[int, int, int]] = []
+    playlist = SimpleNamespace(
+        track_count=0,
+        fetch_tracks=lambda: [],
+        insert_track=lambda track_id, album_id, at: insert_calls.append((track_id, album_id, at)) or playlist,
+    )
+
+    fake_track = SimpleNamespace(
+        id=400,
+        albums=[SimpleNamespace(id=900)],
+    )
+
+    class FakeApiClient:
+        def tracks(self, track_ids: list[str]) -> list[object]:
+            assert track_ids == ["400"]
+            return [fake_track]
+
+    monkeypatch.setattr(client, "_get_or_create_playlist", lambda playlist_name: playlist)
+    monkeypatch.setattr(client, "_create_client", lambda: FakeApiClient())
+
+    client.sync_discovery_playlist(
+        "Discovery",
+        [
+            SimpleNamespace(track_id="400", album_id=None),
+        ],
+    )
+
+    assert insert_calls == [(400, 900, 0)]
+
+
+def test_remove_tracks_from_playlist_uses_current_playlist_positions(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = YandexMusicClient(token="token")
+    deleted_ranges: list[tuple[int, int]] = []
+    playlist = SimpleNamespace(
+        fetch_tracks=lambda: [
+            SimpleNamespace(id="100", album_id="1", original_index=7),
+            SimpleNamespace(id="200", album_id="2", original_index=3),
+            SimpleNamespace(id="300", album_id="3", original_index=1),
+        ],
+        delete_tracks=lambda from_, to: deleted_ranges.append((from_, to)) or playlist,
+    )
+
+    monkeypatch.setattr(client, "_find_playlist", lambda playlist_name: playlist)
+
+    client.remove_tracks_from_playlist("Discovery", {"100", "200"})
+
+    assert deleted_ranges == [(1, 1), (0, 0)]
+
+
+def test_clear_playlist_deletes_playlist_by_kind_and_owner(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = YandexMusicClient(token="token")
+    deleted_playlists: list[tuple[int, str]] = []
+
+    class FakeClient:
+        def users_playlists_list(self) -> list[object]:
+            return [
+                SimpleNamespace(title="Other", kind=10, owner=SimpleNamespace(uid="123")),
+                SimpleNamespace(title="Discovery", kind=42, owner=SimpleNamespace(uid="123")),
+            ]
+
+        def users_playlists_delete(self, kind: int, user_id: str) -> bool:
+            deleted_playlists.append((kind, user_id))
+            return True
+
+    monkeypatch.setattr(client, "_create_client", lambda: FakeClient())
+
+    client.clear_playlist("Discovery")
+
+    assert deleted_playlists == [(42, "123")]
+
+
+def test_clear_playlist_does_nothing_when_playlist_is_missing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = YandexMusicClient(token="token")
+    deleted_playlists: list[tuple[int, str]] = []
+
+    class FakeClient:
+        def users_playlists_list(self) -> list[object]:
+            return [SimpleNamespace(title="Other", kind=10, owner=SimpleNamespace(uid="123"))]
+
+        def users_playlists_delete(self, kind: int, user_id: str) -> bool:
+            deleted_playlists.append((kind, user_id))
+            return True
+
+    monkeypatch.setattr(client, "_create_client", lambda: FakeClient())
+
+    client.clear_playlist("Discovery")
+
+    assert deleted_playlists == []
+
+
+def test_clear_playlist_falls_back_to_track_deletion_without_delete_api(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = YandexMusicClient(token="token")
+    deleted_ranges: list[tuple[int, int]] = []
+    playlist = SimpleNamespace(
+        title="Discovery",
+        kind=42,
+        owner=SimpleNamespace(uid="123"),
+        fetch_tracks=lambda: [
+            SimpleNamespace(id="100", album_id="1"),
+            SimpleNamespace(id="200", album_id="2"),
+        ],
+        delete_tracks=lambda from_, to: deleted_ranges.append((from_, to)) or playlist,
+    )
+
+    class FakeClient:
+        def users_playlists_list(self) -> list[object]:
+            return [playlist]
+
+    monkeypatch.setattr(client, "_create_client", lambda: FakeClient())
+    client.clear_playlist("Discovery")
+
+    assert deleted_ranges == [(1, 1), (0, 0)]
+
+
+def test_remove_tracks_from_playlist_fetches_full_playlist_before_delete(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = YandexMusicClient(token="token")
+    deleted_ranges: list[tuple[int, int]] = []
+
+    list_playlist = SimpleNamespace(
+        title="Discovery",
+        kind=42,
+        owner=SimpleNamespace(uid="123"),
+    )
+    full_playlist = SimpleNamespace(
+        fetch_tracks=lambda: [
+            SimpleNamespace(id="100", album_id="1"),
+            SimpleNamespace(id="200", album_id="2"),
+        ],
+        delete_tracks=lambda from_, to: deleted_ranges.append((from_, to)) or full_playlist,
+    )
+
+    class FakeClient:
+        def users_playlists_list(self) -> list[object]:
+            return [list_playlist]
+
+        def users_playlists(self, kind: int, user_id: str) -> object:
+            assert kind == 42
+            assert user_id == "123"
+            return full_playlist
+
+    monkeypatch.setattr(client, "_create_client", lambda: FakeClient())
+
+    client.remove_tracks_from_playlist("Discovery", {"200"})
+
+    assert deleted_ranges == [(1, 1)]
