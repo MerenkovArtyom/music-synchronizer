@@ -32,7 +32,10 @@ class YandexMusicClient:
         if reference_time is None:
             reference_time = datetime.now().astimezone()
 
-        likes = client.users_likes_tracks()
+        try:
+            likes = client.users_likes_tracks()
+        except Exception as error:
+            raise RuntimeError("Unable to fetch liked tracks from Yandex Music.") from error
         monthly_listens = self._fetch_monthly_listens(client, reference_time)
 
         raw_tracks = getattr(likes, "tracks", likes)

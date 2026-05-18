@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import type { DashboardData, VaultData } from "../src/shared/contracts.js";
+import type { DashboardData, DiscoveryData, ListData, RecommendationData, SyncData, VaultData } from "../src/shared/contracts.js";
 import {
   createRendererController,
   extractTrackView,
@@ -122,6 +122,108 @@ function makeDashboardData(): DashboardData {
   };
 }
 
+function makeSyncData(): SyncData {
+  return {
+    summary: {
+      added: 3,
+      unchanged: 7,
+      archived: 1,
+      removed: 1,
+    },
+  };
+}
+
+function makeRecommendationData(): RecommendationData {
+  return {
+    includeArchived: false,
+    recommendations: [
+      {
+        title: "Nightcall",
+        artists: ["Kavinsky"],
+        monthlyListens: 24,
+        position: 3,
+        archived: false,
+        matchedArtists: ["Kavinsky"],
+        matchedGenres: ["synthwave"],
+        matchedUserTags: ["night"],
+        score: 17,
+        explain: "artists=Kavinsky; genres=synthwave; user_tags=night",
+      },
+    ],
+  };
+}
+
+function makeDiscoveryData(overrides: Partial<DiscoveryData> = {}): DiscoveryData {
+  return {
+    summary: {
+      added: 2,
+      skipped: 1,
+      removedLiked: 0,
+      cleared: 0,
+      total: 3,
+    },
+    recommendations: [
+      {
+        trackId: "88",
+        title: "Popular One",
+        artists: ["Artist A"],
+        album: "Album A",
+        systemTags: ["indie"],
+        year: 2024,
+        coverUrl: "",
+        durationSeconds: 180,
+        yandexUrl: "https://music.yandex.ru/track/88",
+        monthlyListens: 10,
+        discoverySources: ["artist-popular"],
+        explain: "artist-popular",
+      },
+    ],
+    ...overrides,
+  };
+}
+
+function makeListData(): ListData {
+  return {
+    filter: {
+      kind: "tag",
+      value: "night",
+    },
+    tracks: [
+      {
+        title: "Midnight City",
+        artists: ["M83"],
+      },
+    ],
+  };
+}
+
+function makeControllerDeps(overrides: Partial<Parameters<typeof createRendererController>[0]> = {}) {
+  return {
+    getVaultView: async () => {
+      throw new Error("unexpected vault call");
+    },
+    getRecommendationsVaultView: async () => {
+      throw new Error("unexpected recommendations call");
+    },
+    getDashboardData: async () => {
+      throw new Error("unexpected dashboard call");
+    },
+    runSync: async () => {
+      throw new Error("unexpected sync call");
+    },
+    getRecommendations: async () => {
+      throw new Error("unexpected recommend call");
+    },
+    getDiscoveryRecommendations: async () => {
+      throw new Error("unexpected discovery call");
+    },
+    listTracks: async () => {
+      throw new Error("unexpected list call");
+    },
+    ...overrides,
+  };
+}
+
 test("extractTrackView parses frontmatter, note body, and tags for the songs screen", () => {
   const track = extractTrackView(makeVaultData().selectedNote);
 
@@ -139,18 +241,12 @@ test("extractTrackView parses frontmatter, note body, and tags for the songs scr
 
 test("createRendererController loads vault data when songs tab becomes active", async () => {
   const calls: string[] = [];
-  const controller = createRendererController({
+  const controller = createRendererController(makeControllerDeps({
     getVaultView: async (request) => {
       calls.push(`vault:${request.selectedPath ?? ""}`);
       return makeVaultData();
     },
-    getRecommendationsVaultView: async () => {
-      throw new Error("unexpected recommendations call");
-    },
-    getDashboardData: async () => {
-      throw new Error("unexpected dashboard call");
-    },
-  });
+  }));
 
   await controller.activateSection("songs");
 
@@ -161,7 +257,7 @@ test("createRendererController loads vault data when songs tab becomes active", 
 });
 
 test("createRendererController filters songs tab down to tracks paths only", async () => {
-  const controller = createRendererController({
+  const controller = createRendererController(makeControllerDeps({
     getVaultView: async () =>
       makeVaultData({
         tree: [
@@ -206,13 +302,7 @@ test("createRendererController filters songs tab down to tracks paths only", asy
           content: "# Song A\n\nArtists: Artist A\nAlbum: Album A\nYear: 2024\nDuration: 3:00\n",
         },
       }),
-    getRecommendationsVaultView: async () => {
-      throw new Error("unexpected recommendations call");
-    },
-    getDashboardData: async () => {
-      throw new Error("unexpected dashboard call");
-    },
-  });
+  }));
 
   await controller.activateSection("songs");
 
@@ -224,20 +314,14 @@ test("createRendererController filters songs tab down to tracks paths only", asy
 
 test("createRendererController reloads vault data for a selected song", async () => {
   const calls: string[] = [];
-  const controller = createRendererController({
+  const controller = createRendererController(makeControllerDeps({
     getVaultView: async (request) => {
       calls.push(`vault:${request.selectedPath ?? ""}`);
       return makeVaultData({
         selectedPath: request.selectedPath ?? "tracks/Blinding Lights.md",
       });
     },
-    getRecommendationsVaultView: async () => {
-      throw new Error("unexpected recommendations call");
-    },
-    getDashboardData: async () => {
-      throw new Error("unexpected dashboard call");
-    },
-  });
+  }));
 
   await controller.activateSection("songs");
   await controller.selectSong("tracks/_removed/Old Song.md");
@@ -248,7 +332,7 @@ test("createRendererController reloads vault data for a selected song", async ()
 
 test("createRendererController loads recommendation notes from the vault when recommendations tab becomes active", async () => {
   const calls: string[] = [];
-  const controller = createRendererController({
+  const controller = createRendererController(makeControllerDeps({
     getVaultView: async () => {
       throw new Error("unexpected songs vault call");
     },
@@ -281,10 +365,7 @@ test("createRendererController loads recommendation notes from the vault when re
         }),
       };
     },
-    getDashboardData: async () => {
-      throw new Error("unexpected dashboard call");
-    },
-  });
+  }));
 
   await controller.activateSection("recommendations");
 
@@ -295,27 +376,73 @@ test("createRendererController loads recommendation notes from the vault when re
 });
 
 test("createRendererController keeps placeholder sections local and avoids backend calls", async () => {
-  const controller = createRendererController({
-    getVaultView: async () => {
-      throw new Error("unexpected vault call");
-    },
-    getRecommendationsVaultView: async () => {
-      throw new Error("unexpected recommendations call");
-    },
-    getDashboardData: async () => {
-      throw new Error("unexpected dashboard call");
-    },
-  });
+  const controller = createRendererController(makeControllerDeps());
 
   await controller.activateSection("home");
 
   assert.equal(controller.getState().activeSection, "home");
-  assert.equal(controller.getState().status.message, "Раздел в разработке");
+  assert.equal(controller.getState().status.message, "Быстрые действия и локальные инструменты.");
+});
+
+test("createRendererController runs home actions and stores their results", async () => {
+  const calls: string[] = [];
+  const controller = createRendererController(makeControllerDeps({
+    runSync: async () => {
+      calls.push("sync");
+      return makeSyncData();
+    },
+    getRecommendations: async (request) => {
+      calls.push(`recommend:${String(request.archived)}`);
+      return makeRecommendationData();
+    },
+    getDiscoveryRecommendations: async (request) => {
+      calls.push(`discovery:${String(request.clear)}`);
+      return request.clear
+        ? makeDiscoveryData({
+            summary: {
+              added: 0,
+              skipped: 0,
+              removedLiked: 0,
+              cleared: 3,
+              total: 0,
+            },
+            recommendations: [],
+          })
+        : makeDiscoveryData();
+    },
+    listTracks: async (request) => {
+      calls.push(`list:${request.kind}:${request.value}`);
+      return makeListData();
+    },
+  }));
+
+  await controller.activateSection("home");
+  await controller.runHomeSync();
+  await controller.loadHomeRecommendations();
+  await controller.runHomeDiscovery();
+  await controller.clearHomeDiscovery();
+  controller.setHomeListFilterKind("artist");
+  controller.setHomeListFilterValue("M83");
+  await controller.runHomeList();
+
+  assert.deepEqual(calls, [
+    "sync",
+    "recommend:false",
+    "discovery:false",
+    "discovery:true",
+    "list:artist:M83",
+  ]);
+  assert.equal(controller.getState().home.syncSummary?.added, 3);
+  assert.equal(controller.getState().home.recommendations[0]?.title, "Nightcall");
+  assert.equal(controller.getState().home.discoverySummary?.cleared, 3);
+  assert.equal(controller.getState().home.listResult?.filter.kind, "tag");
+  assert.equal(controller.getState().home.listFilter.kind, "artist");
+  assert.equal(controller.getState().home.listFilter.value, "M83");
 });
 
 test("createRendererController loads dashboard note and summary when dashboard tab becomes active", async () => {
   const calls: string[] = [];
-  const controller = createRendererController({
+  const controller = createRendererController(makeControllerDeps({
     getVaultView: async (request) => {
       calls.push(`vault:${request.selectedPath ?? ""}`);
       return makeVaultData({
@@ -336,14 +463,11 @@ test("createRendererController loads dashboard note and summary when dashboard t
         },
       });
     },
-    getRecommendationsVaultView: async () => {
-      throw new Error("unexpected recommendations call");
-    },
     getDashboardData: async () => {
       calls.push("dashboard");
       return makeDashboardData();
     },
-  });
+  }));
 
   await controller.activateSection("dashboard");
 
@@ -367,6 +491,7 @@ test("formatDuration returns a compact minute-second label", () => {
 
 test("sectionLayoutMode hides secondary chrome only for dashboard", () => {
   assert.equal(sectionLayoutMode("dashboard"), "dashboard");
+  assert.equal(sectionLayoutMode("home"), "home");
   assert.equal(sectionLayoutMode("songs"), "default");
   assert.equal(sectionLayoutMode("recommendations"), "default");
 });

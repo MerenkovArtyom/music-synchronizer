@@ -1,4 +1,16 @@
-import type { DashboardData, VaultData, VaultRequest, VaultTreeNode } from "../shared/contracts.js";
+import type {
+  DashboardData,
+  DiscoveryData,
+  DiscoveryRequest,
+  ListData,
+  ListTracksRequest,
+  RecommendationData,
+  RecommendationRequest,
+  SyncData,
+  VaultData,
+  VaultRequest,
+  VaultTreeNode,
+} from "../shared/contracts.js";
 
 export type AppSection =
   | "home"
@@ -8,7 +20,7 @@ export type AppSection =
   | "artists"
   | "recommendations";
 
-export type SectionLayoutMode = "default" | "dashboard";
+export type SectionLayoutMode = "default" | "dashboard" | "home";
 
 export interface RendererStatus {
   tone: "idle" | "loading" | "success" | "placeholder";
@@ -70,9 +82,23 @@ export interface DashboardView {
   topArtists: DashboardData["topArtists"];
 }
 
+export interface HomeListFilter {
+  kind: ListTracksRequest["kind"];
+  value: string;
+}
+
+export interface HomeState {
+  syncSummary: SyncData["summary"] | null;
+  recommendations: RecommendationData["recommendations"];
+  discoverySummary: DiscoveryData["summary"] | null;
+  listFilter: HomeListFilter;
+  listResult: ListData | null;
+}
+
 export interface RendererState {
   activeSection: AppSection;
   status: RendererStatus;
+  home: HomeState;
   songItems: SongListItem[];
   selectedSongPath: string | null;
   trackView: TrackView | null;
@@ -90,9 +116,16 @@ interface ControllerDeps {
   getVaultView: (request: VaultRequest) => Promise<VaultData>;
   getRecommendationsVaultView: (request: VaultRequest) => Promise<VaultData>;
   getDashboardData: () => Promise<DashboardData>;
+  runSync: () => Promise<SyncData>;
+  getRecommendations: (request: RecommendationRequest) => Promise<RecommendationData>;
+  getDiscoveryRecommendations: (request: DiscoveryRequest) => Promise<DiscoveryData>;
+  listTracks: (request: ListTracksRequest) => Promise<ListData>;
 }
 
 export function sectionLayoutMode(section: AppSection): SectionLayoutMode {
+  if (section === "home") {
+    return "home";
+  }
   return section === "dashboard" ? "dashboard" : "default";
 }
 
@@ -391,10 +424,20 @@ function placeholderCopy(section: AppSection): { title: string; body: string } {
 
 export function createRendererController(deps: ControllerDeps) {
   const state: RendererState = {
-    activeSection: "songs",
+    activeSection: "home",
     status: {
       tone: "idle",
       message: "Готово к загрузке библиотеки",
+    },
+    home: {
+      syncSummary: null,
+      recommendations: [],
+      discoverySummary: null,
+      listFilter: {
+        kind: "tag",
+        value: "",
+      },
+      listResult: null,
     },
     songItems: [],
     selectedSongPath: null,
@@ -481,12 +524,23 @@ export function createRendererController(deps: ControllerDeps) {
     };
   }
 
+  function activateHome(): void {
+    state.status = {
+      tone: "idle",
+      message: "Быстрые действия и локальные инструменты.",
+    };
+  }
+
   return {
     getState(): RendererState {
       return state;
     },
     async activateSection(section: AppSection): Promise<void> {
       state.activeSection = section;
+      if (section === "home") {
+        activateHome();
+        return;
+      }
       if (section === "songs") {
         await loadSongs();
         return;
@@ -506,6 +560,66 @@ export function createRendererController(deps: ControllerDeps) {
       state.status = {
         tone: "placeholder",
         message: placeholder.body,
+      };
+    },
+    async runHomeSync(): Promise<void> {
+      state.activeSection = "home";
+      const payload = await deps.runSync();
+      state.home.syncSummary = payload.summary;
+      state.status = {
+        tone: "success",
+        message: "Синхронизация завершена",
+      };
+    },
+    async loadHomeRecommendations(): Promise<void> {
+      state.activeSection = "home";
+      const payload = await deps.getRecommendations({ archived: false });
+      state.home.recommendations = payload.recommendations;
+      state.status = {
+        tone: "success",
+        message:
+          payload.recommendations.length > 0
+            ? "Рекомендации лайкнутых загружены"
+            : "Рекомендации лайкнутых не найдены",
+      };
+    },
+    async runHomeDiscovery(): Promise<void> {
+      state.activeSection = "home";
+      const payload = await deps.getDiscoveryRecommendations({ clear: false });
+      state.home.discoverySummary = payload.summary;
+      state.status = {
+        tone: "success",
+        message: "Discovery рекомендации обновлены",
+      };
+    },
+    async clearHomeDiscovery(): Promise<void> {
+      state.activeSection = "home";
+      const payload = await deps.getDiscoveryRecommendations({ clear: true });
+      state.home.discoverySummary = payload.summary;
+      state.status = {
+        tone: "success",
+        message: "Discovery рекомендации очищены",
+      };
+    },
+    setHomeListFilterKind(kind: ListTracksRequest["kind"]): void {
+      state.home.listFilter.kind = kind;
+    },
+    setHomeListFilterValue(value: string): void {
+      state.home.listFilter.value = value;
+    },
+    async runHomeList(): Promise<void> {
+      state.activeSection = "home";
+      const payload = await deps.listTracks({
+        kind: state.home.listFilter.kind,
+        value: state.home.listFilter.value,
+      });
+      state.home.listResult = payload;
+      state.status = {
+        tone: "success",
+        message:
+          payload.tracks.length > 0
+            ? "Список треков загружен"
+            : "Совпадений по фильтру не найдено",
       };
     },
     async selectSong(path: string): Promise<void> {

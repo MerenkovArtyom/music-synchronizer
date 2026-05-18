@@ -1,4 +1,4 @@
-import type { BackendEnvelope, VaultData } from "../shared/contracts.js";
+import type { BackendEnvelope, DiscoveryData, ListData, RecommendationData, SyncData, VaultData } from "../shared/contracts.js";
 import {
   createRendererController,
   type AppSection,
@@ -22,6 +22,19 @@ const viewerPlaceholder = document.querySelector<HTMLElement>("#viewer-placehold
 const placeholderTitle = document.querySelector<HTMLElement>("#placeholder-title");
 const placeholderBody = document.querySelector<HTMLElement>("#placeholder-body");
 const metaPlaceholder = document.querySelector<HTMLElement>("#meta-placeholder");
+
+const homeView = document.querySelector<HTMLElement>("#home-view");
+const homeSyncButton = document.querySelector<HTMLButtonElement>("#home-sync-button");
+const homeRecommendButton = document.querySelector<HTMLButtonElement>("#home-recommend-button");
+const homeDiscoveryButton = document.querySelector<HTMLButtonElement>("#home-discovery-button");
+const homeDiscoveryClearButton = document.querySelector<HTMLButtonElement>("#home-discovery-clear-button");
+const homeListForm = document.querySelector<HTMLFormElement>("#home-list-form");
+const homeListKind = document.querySelector<HTMLSelectElement>("#home-list-kind");
+const homeListValue = document.querySelector<HTMLInputElement>("#home-list-value");
+const homeSyncSummary = document.querySelector<HTMLElement>("#home-sync-summary");
+const homeRecommendationsList = document.querySelector<HTMLElement>("#home-recommendations-list");
+const homeDiscoverySummary = document.querySelector<HTMLElement>("#home-discovery-summary");
+const homeListResult = document.querySelector<HTMLElement>("#home-list-result");
 
 const dashboardView = document.querySelector<HTMLElement>("#dashboard-view");
 const dashboardTab = document.querySelector<HTMLElement>("#dashboard-tab");
@@ -115,6 +128,38 @@ async function expectDashboardData() {
   return result.data;
 }
 
+async function expectSyncData(): Promise<SyncData> {
+  const result = await window.musicSync.runSync();
+  if (!result.ok) {
+    throw new Error(errorSummary(result));
+  }
+  return result.data;
+}
+
+async function expectRecommendationData(): Promise<RecommendationData> {
+  const result = await window.musicSync.getRecommendations({ archived: false });
+  if (!result.ok) {
+    throw new Error(errorSummary(result));
+  }
+  return result.data;
+}
+
+async function expectDiscoveryData(clear: boolean): Promise<DiscoveryData> {
+  const result = await window.musicSync.getDiscoveryRecommendations({ clear });
+  if (!result.ok) {
+    throw new Error(errorSummary(result));
+  }
+  return result.data;
+}
+
+async function expectListData(kind: "tag" | "artist", value: string): Promise<ListData> {
+  const result = await window.musicSync.listTracks({ kind, value });
+  if (!result.ok) {
+    throw new Error(errorSummary(result));
+  }
+  return result.data;
+}
+
 const controller = createRendererController({
   getVaultView: async (request) => {
     if (request.selectedPath) {
@@ -127,6 +172,18 @@ const controller = createRendererController({
   },
   getDashboardData: async () => {
     return await expectDashboardData();
+  },
+  runSync: async () => {
+    return await expectSyncData();
+  },
+  getRecommendations: async () => {
+    return await expectRecommendationData();
+  },
+  getDiscoveryRecommendations: async (request) => {
+    return await expectDiscoveryData(request.clear);
+  },
+  listTracks: async (request) => {
+    return await expectListData(request.kind, request.value);
   },
 });
 
@@ -459,6 +516,148 @@ function renderRecommendationsList(state: RendererState): void {
   listContent.appendChild(group);
 }
 
+function renderSummaryGrid(target: HTMLElement | null, rows: Array<[string, string]>, emptyLabel: string): void {
+  if (!target) {
+    return;
+  }
+
+  target.innerHTML = "";
+  if (rows.length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "result-empty";
+    empty.textContent = emptyLabel;
+    target.appendChild(empty);
+    return;
+  }
+
+  for (const [label, value] of rows) {
+    const row = document.createElement("div");
+    row.className = "summary-item";
+
+    const labelNode = document.createElement("span");
+    labelNode.className = "summary-label";
+    labelNode.textContent = label;
+
+    const valueNode = document.createElement("strong");
+    valueNode.className = "summary-value";
+    valueNode.textContent = value;
+
+    row.append(labelNode, valueNode);
+    target.appendChild(row);
+  }
+}
+
+function renderHomeRecommendations(state: RendererState): void {
+  if (!homeRecommendationsList) {
+    return;
+  }
+
+  homeRecommendationsList.innerHTML = "";
+  if (state.home.recommendations.length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "result-empty";
+    empty.textContent = "Список рекомендаций пока пуст.";
+    homeRecommendationsList.appendChild(empty);
+    return;
+  }
+
+  for (const item of state.home.recommendations) {
+    const row = document.createElement("article");
+    row.className = "result-row";
+
+    const title = document.createElement("h4");
+    title.className = "result-title";
+    title.textContent = item.title;
+
+    const subtitle = document.createElement("p");
+    subtitle.className = "result-subtitle";
+    subtitle.textContent = item.artists.join(", ") || "—";
+
+    const note = document.createElement("p");
+    note.className = "result-note";
+    note.textContent = item.explain;
+
+    row.append(title, subtitle, note);
+    homeRecommendationsList.appendChild(row);
+  }
+}
+
+function renderHomeListResult(state: RendererState): void {
+  if (!homeListResult) {
+    return;
+  }
+
+  homeListResult.innerHTML = "";
+  if (!state.home.listResult) {
+    const empty = document.createElement("p");
+    empty.className = "result-empty";
+    empty.textContent = "Выберите фильтр и загрузите список.";
+    homeListResult.appendChild(empty);
+    return;
+  }
+
+  if (state.home.listResult.tracks.length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "result-empty";
+    empty.textContent = "Совпадений по фильтру не найдено.";
+    homeListResult.appendChild(empty);
+    return;
+  }
+
+  for (const item of state.home.listResult.tracks) {
+    const row = document.createElement("article");
+    row.className = "result-row";
+
+    const title = document.createElement("h4");
+    title.className = "result-title";
+    title.textContent = item.title;
+
+    const subtitle = document.createElement("p");
+    subtitle.className = "result-subtitle";
+    subtitle.textContent = item.artists.join(", ") || "—";
+
+    row.append(title, subtitle);
+    homeListResult.appendChild(row);
+  }
+}
+
+function renderHomeView(state: RendererState): void {
+  if (homeListKind) {
+    homeListKind.value = state.home.listFilter.kind;
+  }
+  if (homeListValue) {
+    homeListValue.value = state.home.listFilter.value;
+  }
+
+  renderSummaryGrid(
+    homeSyncSummary,
+    state.home.syncSummary
+      ? [
+          ["Добавлено", String(state.home.syncSummary.added)],
+          ["Без изменений", String(state.home.syncSummary.unchanged)],
+          ["Архивировано", String(state.home.syncSummary.archived)],
+          ["Удалено", String(state.home.syncSummary.removed)],
+        ]
+      : [],
+    "Синхронизация ещё не запускалась.",
+  );
+  renderHomeRecommendations(state);
+  renderSummaryGrid(
+    homeDiscoverySummary,
+    state.home.discoverySummary
+      ? [
+          ["Добавлено", String(state.home.discoverySummary.added)],
+          ["Пропущено", String(state.home.discoverySummary.skipped)],
+          ["Уже лайкнуто", String(state.home.discoverySummary.removedLiked)],
+          ["Очищено", String(state.home.discoverySummary.cleared)],
+          ["Всего", String(state.home.discoverySummary.total)],
+        ]
+      : [],
+    "Discovery summary пока не загружен.",
+  );
+  renderHomeListResult(state);
+}
+
 function renderNavigation(activeSection: AppSection): void {
   for (const navItem of navItems) {
     const isActive = navItem.dataset.section === activeSection;
@@ -477,11 +676,16 @@ function renderPlaceholder(state: RendererState): void {
 }
 
 function renderLayoutVisibility(state: RendererState): void {
+  const homeActive = state.activeSection === "home";
   const dashboardActive = state.activeSection === "dashboard" && state.dashboardView !== null;
   const songActive = state.activeSection === "songs" && state.trackView !== null;
   const recommendationActive =
     state.activeSection === "recommendations" && state.recommendationView !== null;
-  const placeholderActive = !dashboardActive && !songActive && !recommendationActive;
+  const placeholderActive = !homeActive && !dashboardActive && !songActive && !recommendationActive;
+
+  if (homeView) {
+    homeView.hidden = !homeActive;
+  }
 
   if (viewerPlaceholder) {
     viewerPlaceholder.hidden = !placeholderActive;
@@ -543,6 +747,13 @@ function renderSidebarCopy(state: RendererState): void {
     return;
   }
 
+  if (state.activeSection === "home") {
+    listKicker.textContent = "Главная";
+    listHeading.textContent = "actions/";
+    listSubtitle.textContent = "Быстрые действия, рекомендации и локальные фильтры.";
+    return;
+  }
+
   listKicker.textContent = "Раздел";
   listHeading.textContent = state.placeholderTitle || "Скоро будет";
   listSubtitle.textContent = state.placeholderBody || "Этот экран появится позже.";
@@ -555,7 +766,15 @@ function render(): void {
   renderSidebarCopy(state);
   renderLayoutVisibility(state);
 
-  if (state.activeSection === "songs") {
+  if (state.activeSection === "home") {
+    if (listContent) {
+      listContent.innerHTML = "";
+    }
+    if (listEmpty) {
+      listEmpty.hidden = true;
+    }
+    renderHomeView(state);
+  } else if (state.activeSection === "songs") {
     renderSongsList(state);
     renderSongView(state.trackView);
   } else if (state.activeSection === "dashboard") {
@@ -593,7 +812,9 @@ function render(): void {
   renderPlaceholder(state);
   setStatus(
     state.status.tone,
-    state.activeSection === "songs"
+    state.activeSection === "home"
+      ? "Главная"
+      : state.activeSection === "songs"
       ? "Песни"
       : state.activeSection === "dashboard"
         ? "Дэшборд"
@@ -606,7 +827,9 @@ function render(): void {
 
 async function activateSection(section: AppSection): Promise<void> {
   const loadingMessage =
-    section === "songs"
+    section === "home"
+      ? "Открываю главную..."
+      : section === "songs"
       ? "Загружаю локальные заметки..."
       : section === "recommendations"
         ? "Загружаю рекомендации..."
@@ -649,6 +872,76 @@ async function openRecommendation(path: string): Promise<void> {
   }
 }
 
+async function runHomeSync(): Promise<void> {
+  setBusy(true);
+  setStatus("loading", "Загрузка", "Запускаю sync...");
+  try {
+    await controller.runHomeSync();
+    render();
+  } catch (error) {
+    setStatus("error", "Ошибка", error instanceof Error ? error.message : "Не удалось выполнить sync");
+  } finally {
+    setBusy(false);
+  }
+}
+
+async function loadHomeRecommendations(): Promise<void> {
+  setBusy(true);
+  setStatus("loading", "Загрузка", "Получаю рекомендации лайкнутых...");
+  try {
+    await controller.loadHomeRecommendations();
+    render();
+  } catch (error) {
+    setStatus("error", "Ошибка", error instanceof Error ? error.message : "Не удалось получить рекомендации");
+  } finally {
+    setBusy(false);
+  }
+}
+
+async function runHomeDiscovery(clear: boolean): Promise<void> {
+  setBusy(true);
+  setStatus(
+    "loading",
+    "Загрузка",
+    clear ? "Очищаю discovery рекомендации..." : "Запускаю discovery рекомендации...",
+  );
+  try {
+    if (clear) {
+      await controller.clearHomeDiscovery();
+    } else {
+      await controller.runHomeDiscovery();
+    }
+    render();
+  } catch (error) {
+    setStatus(
+      "error",
+      "Ошибка",
+      error instanceof Error
+        ? error.message
+        : clear
+          ? "Не удалось очистить discovery"
+          : "Не удалось выполнить discovery",
+    );
+  } finally {
+    setBusy(false);
+  }
+}
+
+async function runHomeList(): Promise<void> {
+  controller.setHomeListFilterKind((homeListKind?.value as "tag" | "artist" | undefined) ?? "tag");
+  controller.setHomeListFilterValue(homeListValue?.value.trim() ?? "");
+  setBusy(true);
+  setStatus("loading", "Загрузка", "Строю список треков...");
+  try {
+    await controller.runHomeList();
+    render();
+  } catch (error) {
+    setStatus("error", "Ошибка", error instanceof Error ? error.message : "Не удалось построить список");
+  } finally {
+    setBusy(false);
+  }
+}
+
 for (const navItem of navItems) {
   navItem.addEventListener("click", () => {
     const section = navItem.dataset.section as AppSection | undefined;
@@ -659,4 +952,33 @@ for (const navItem of navItems) {
   });
 }
 
-void activateSection("songs");
+homeSyncButton?.addEventListener("click", () => {
+  void runHomeSync();
+});
+
+homeRecommendButton?.addEventListener("click", () => {
+  void loadHomeRecommendations();
+});
+
+homeDiscoveryButton?.addEventListener("click", () => {
+  void runHomeDiscovery(false);
+});
+
+homeDiscoveryClearButton?.addEventListener("click", () => {
+  void runHomeDiscovery(true);
+});
+
+homeListForm?.addEventListener("submit", (event) => {
+  event.preventDefault();
+  void runHomeList();
+});
+
+homeListKind?.addEventListener("change", () => {
+  controller.setHomeListFilterKind((homeListKind.value as "tag" | "artist") ?? "tag");
+});
+
+homeListValue?.addEventListener("input", () => {
+  controller.setHomeListFilterValue(homeListValue.value);
+});
+
+void activateSection("home");

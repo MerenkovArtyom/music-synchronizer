@@ -177,6 +177,30 @@ def test_fetch_liked_tracks_raises_clear_error_when_dependency_missing(
         client.fetch_liked_tracks()
 
 
+def test_fetch_liked_tracks_raises_clear_error_when_likes_are_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake_module = ModuleType("yandex_music")
+
+    class FakeClient:
+        def __init__(self, token: str) -> None:
+            self.token = token
+
+        def init(self) -> "FakeClient":
+            return self
+
+        def users_likes_tracks(self) -> list[_FakeTrackShort]:
+            raise ConnectionError("service unavailable")
+
+    fake_module.Client = FakeClient
+    monkeypatch.setitem(sys.modules, "yandex_music", fake_module)
+
+    client = YandexMusicClient(token="token")
+
+    with pytest.raises(RuntimeError, match="Unable to fetch liked tracks from Yandex Music."):
+        client.fetch_liked_tracks()
+
+
 def test_fetch_liked_tracks_populates_monthly_listens_from_recent_history(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

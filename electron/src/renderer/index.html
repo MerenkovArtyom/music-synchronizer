@@ -65,6 +65,84 @@
       </section>
 
       <main class="viewer-panel">
+        <section id="home-view" class="viewer-card home-view" hidden>
+          <div class="home-hero">
+            <p class="panel-kicker">Быстрые действия</p>
+            <h2>Главная</h2>
+            <p class="panel-copy">
+              Синхронизируйте библиотеку, загружайте рекомендации и запускайте быстрые выборки без перехода по разделам.
+            </p>
+          </div>
+
+          <section class="result-card action-card">
+            <div class="card-head">
+              <div>
+                <p class="panel-kicker">Sync</p>
+                <h3>Синхронизация</h3>
+              </div>
+              <button id="home-sync-button" class="action-button" type="button">Запустить sync</button>
+            </div>
+            <div id="home-sync-summary" class="summary-grid">
+              <p class="result-empty">Синхронизация ещё не запускалась.</p>
+            </div>
+          </section>
+
+          <section class="result-card action-card">
+            <div class="card-head">
+              <div>
+                <p class="panel-kicker">Liked</p>
+                <h3>Рекомендации лайкнутых</h3>
+              </div>
+              <button id="home-recommend-button" class="action-button" type="button">Загрузить recommend</button>
+            </div>
+            <div id="home-recommendations-list" class="result-list">
+              <p class="result-empty">Список рекомендаций пока пуст.</p>
+            </div>
+          </section>
+
+          <section class="result-card action-card">
+            <div class="card-head">
+              <div>
+                <p class="panel-kicker">Discovery</p>
+                <h3>Сетевые рекомендации</h3>
+              </div>
+              <div class="button-row">
+                <button id="home-discovery-button" class="action-button" type="button">Запустить discovery</button>
+                <button id="home-discovery-clear-button" class="action-button action-button-secondary" type="button">Очистить discovery</button>
+              </div>
+            </div>
+            <div id="home-discovery-summary" class="summary-grid">
+              <p class="result-empty">Discovery summary пока не загружен.</p>
+            </div>
+          </section>
+
+          <section class="result-card action-card">
+            <div class="card-head">
+              <div>
+                <p class="panel-kicker">List</p>
+                <h3>Фильтр по тегу или артисту</h3>
+              </div>
+            </div>
+            <form id="home-list-form" class="list-query-form">
+              <label class="field-block" for="home-list-kind">
+                <span>Фильтр</span>
+                <select id="home-list-kind" name="kind">
+                  <option value="tag">Тег</option>
+                  <option value="artist">Артист</option>
+                </select>
+              </label>
+              <label class="field-block field-grow" for="home-list-value">
+                <span>Значение</span>
+                <input id="home-list-value" name="value" type="text" placeholder="Например, synthwave" />
+              </label>
+              <button id="home-list-submit" class="action-button" type="submit">Показать список</button>
+            </form>
+            <div id="home-list-result" class="result-list">
+              <p class="result-empty">Выберите фильтр и загрузите список.</p>
+            </div>
+          </section>
+        </section>
+
         <section id="viewer-placeholder" class="placeholder-panel">
           <p class="placeholder-kicker">Скоро будет</p>
           <h2 id="placeholder-title">Выберите раздел</h2>
