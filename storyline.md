@@ -212,3 +212,13 @@
 - Dashboard в приложении переведён в более спокойный obsidian-like режим: без второй и четвёртой колонок, с упором на чтение самой заметки.
 - Заголовок и типографика dashboard-view в Electron подстроены под формат обычной vault-note, а не отдельной dashboard-card.
 - Python- и Electron-тесты обновлены под новый формат dashboard без recommendation-блоков.
+
+## 2026-05-21
+
+### Commit 31: add artists and tags note browser to Electron
+
+- Вкладки `artists` и `tags` в desktop-shell перестали быть заглушками и теперь показывают локальные заметки из одноимённых папок vault.
+- Для обеих вкладок добавлен note-first сценарий: список файлов слева, markdown-preview по центру и безопасный выбор заметки через существующий `vault` backend.
+- В markdown-рендерере появилась поддержка Obsidian-style wiki-links вида `[[tracks/...|...]]` и `[[tracks/...]]`, чтобы заметки по артистам и тегам могли ссылаться на песни.
+- Клик по внутренней ссылке на `tracks/*.md` или `tracks/_removed/*.md` теперь переключает интерфейс во вкладку `songs` и открывает нужную заметку трека.
+- Electron tests и typecheck обновлены под новый browse-flow и разбор wiki-links.

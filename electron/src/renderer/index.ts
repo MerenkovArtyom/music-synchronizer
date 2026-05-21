@@ -4,9 +4,13 @@ import {
   type AppSection,
   type DashboardView,
   type DiscoveryView,
+  parseWikiLink,
   type RendererState,
   sectionLayoutMode,
   type TrackView,
+  resolveInternalTrackLink,
+  type VaultNoteListItem,
+  type VaultNoteView,
 } from "./shell-controller.js";
 
 const appShell = document.querySelector<HTMLElement>(".app-shell");
@@ -71,6 +75,10 @@ const recommendationMeta = document.querySelector<HTMLElement>("#recommendation-
 const recommendationMetaList = document.querySelector<HTMLElement>("#recommendation-meta-list");
 const recommendationSources = document.querySelector<HTMLElement>("#recommendation-sources");
 const recommendationTags = document.querySelector<HTMLElement>("#recommendation-tags");
+const vaultNoteView = document.querySelector<HTMLElement>("#vault-note-view");
+const vaultNoteTitle = document.querySelector<HTMLElement>("#vault-note-title");
+const vaultNoteTab = document.querySelector<HTMLElement>("#vault-note-tab");
+const vaultNoteBody = document.querySelector<HTMLElement>("#vault-note-body");
 
 function errorSummary<T>(result: BackendEnvelope<T>): string {
   if (result.ok) {
@@ -201,6 +209,13 @@ function renderMarkdownInline(text: string): string {
   rendered = rendered.replace(/!\[([^\]]*)\]\(([^)\s]+)\)/g, (_match, alt: string, url: string) => {
     return `<img alt="${escapeHtml(alt)}" src="${escapeHtml(url)}" />`;
   });
+  rendered = rendered.replace(/\[\[[^\]]+\]\]/g, (match: string) => {
+    const parsed = parseWikiLink(match);
+    if (!parsed) {
+      return match;
+    }
+    return `<a href="${escapeHtml(parsed.target)}">${escapeHtml(parsed.label)}</a>`;
+  });
   rendered = rendered.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (_match, label: string, url: string) => {
     return `<a href="${escapeHtml(url)}" target="_blank" rel="noreferrer">${escapeHtml(label)}</a>`;
   });
@@ -240,6 +255,23 @@ function renderMarkdown(content: string): string {
   }
 
   return html.join("");
+}
+
+function bindTrackLinks(target: HTMLElement | null, currentPath: string): void {
+  if (!target) {
+    return;
+  }
+
+  for (const link of Array.from(target.querySelectorAll<HTMLAnchorElement>("a[href]"))) {
+    const href = link.getAttribute("href") ?? "";
+    const trackPath = resolveInternalTrackLink(currentPath, href);
+    if (!trackPath) {
+      continue;
+    }
+    link.dataset.trackPath = trackPath;
+    link.removeAttribute("target");
+    link.removeAttribute("rel");
+  }
 }
 
 function renderFacts(target: HTMLElement | null, rows: Array<[string, string]>): void {
@@ -378,6 +410,7 @@ function renderRecommendationView(view: DiscoveryView | null): void {
   updateCover(recommendationCoverFrame, recommendationCover, view.coverUrl, view.title);
   if (recommendationNote) {
     recommendationNote.innerHTML = renderMarkdown(view.noteBody);
+    bindTrackLinks(recommendationNote, view.path);
   }
 
   renderMetaList(recommendationMetaList, [
@@ -390,6 +423,23 @@ function renderRecommendationView(view: DiscoveryView | null): void {
   ]);
   renderTagList(recommendationSources, view.sources, "Нет источников");
   renderTagList(recommendationTags, view.systemTags, "Нет тегов");
+}
+
+function renderVaultNoteViewer(view: VaultNoteView | null): void {
+  if (!view || !vaultNoteView) {
+    return;
+  }
+
+  if (vaultNoteTitle) {
+    vaultNoteTitle.textContent = view.title;
+  }
+  if (vaultNoteTab) {
+    vaultNoteTab.textContent = view.path;
+  }
+  if (vaultNoteBody) {
+    vaultNoteBody.innerHTML = renderMarkdown(view.noteBody);
+    bindTrackLinks(vaultNoteBody, view.path);
+  }
 }
 
 function renderDashboardView(view: DashboardView | null): void {
@@ -510,6 +560,45 @@ function renderRecommendationsList(state: RendererState): void {
     subtitle.textContent = item.subtitle;
 
     button.append(title, subtitle);
+    group.appendChild(button);
+  }
+
+  listContent.appendChild(group);
+}
+
+function renderVaultNoteList(
+  items: VaultNoteListItem[],
+  selectedPath: string | null,
+  emptyLabel: string,
+  onSelect: (path: string) => void,
+): void {
+  if (!listContent || !listEmpty) {
+    return;
+  }
+
+  listContent.innerHTML = "";
+  if (items.length === 0) {
+    listEmpty.hidden = false;
+    listEmpty.textContent = emptyLabel;
+    return;
+  }
+
+  listEmpty.hidden = true;
+  const group = document.createElement("section");
+  group.className = "list-group";
+
+  for (const item of items) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = `list-item${item.path === selectedPath ? " is-selected" : ""}`;
+    button.addEventListener("click", () => {
+      onSelect(item.path);
+    });
+
+    const label = document.createElement("span");
+    label.className = "list-item-title";
+    label.textContent = item.label;
+    button.appendChild(label);
     group.appendChild(button);
   }
 
@@ -681,7 +770,10 @@ function renderLayoutVisibility(state: RendererState): void {
   const songActive = state.activeSection === "songs" && state.trackView !== null;
   const recommendationActive =
     state.activeSection === "recommendations" && state.recommendationView !== null;
-  const placeholderActive = !homeActive && !dashboardActive && !songActive && !recommendationActive;
+  const artistActive = state.activeSection === "artists" && state.artistView !== null;
+  const tagActive = state.activeSection === "tags" && state.tagView !== null;
+  const placeholderActive = !homeActive && !dashboardActive && !songActive && !recommendationActive && !artistActive && !tagActive;
+  const metaPlaceholderActive = placeholderActive || artistActive || tagActive;
 
   if (homeView) {
     homeView.hidden = !homeActive;
@@ -691,7 +783,7 @@ function renderLayoutVisibility(state: RendererState): void {
     viewerPlaceholder.hidden = !placeholderActive;
   }
   if (metaPlaceholder) {
-    metaPlaceholder.hidden = !placeholderActive;
+    metaPlaceholder.hidden = !metaPlaceholderActive;
   }
   if (songView) {
     songView.hidden = !songActive;
@@ -710,6 +802,9 @@ function renderLayoutVisibility(state: RendererState): void {
   }
   if (recommendationMeta) {
     recommendationMeta.hidden = !recommendationActive;
+  }
+  if (vaultNoteView) {
+    vaultNoteView.hidden = !(artistActive || tagActive);
   }
 }
 
@@ -744,6 +839,20 @@ function renderSidebarCopy(state: RendererState): void {
     listKicker.textContent = "Discovery";
     listHeading.textContent = "recommendations/";
     listSubtitle.textContent = "Сетевые рекомендации из Yandex Music.";
+    return;
+  }
+
+  if (state.activeSection === "artists") {
+    listKicker.textContent = "Vault";
+    listHeading.textContent = "artists/";
+    listSubtitle.textContent = "Заметки по артистам с переходом в песни по внутренним ссылкам.";
+    return;
+  }
+
+  if (state.activeSection === "tags") {
+    listKicker.textContent = "Vault";
+    listHeading.textContent = "tags/";
+    listSubtitle.textContent = "Заметки по тегам с переходом в песни по внутренним ссылкам.";
     return;
   }
 
@@ -799,6 +908,16 @@ function render(): void {
   } else if (state.activeSection === "recommendations") {
     renderRecommendationsList(state);
     renderRecommendationView(state.recommendationView);
+  } else if (state.activeSection === "artists") {
+    renderVaultNoteList(state.artistItems, state.selectedArtistPath, "В папке `artists/` пока нет заметок.", (path) => {
+      void selectArtist(path);
+    });
+    renderVaultNoteViewer(state.artistView);
+  } else if (state.activeSection === "tags") {
+    renderVaultNoteList(state.tagItems, state.selectedTagPath, "В папке `tags/` пока нет заметок.", (path) => {
+      void selectTag(path);
+    });
+    renderVaultNoteViewer(state.tagView);
   } else {
     if (listContent) {
       listContent.innerHTML = "";
@@ -820,6 +939,10 @@ function render(): void {
         ? "Дэшборд"
       : state.activeSection === "recommendations"
         ? "Рекомы"
+        : state.activeSection === "artists"
+          ? "Артисты"
+          : state.activeSection === "tags"
+            ? "Теги"
         : "Скоро",
     state.status.message,
   );
@@ -833,6 +956,10 @@ async function activateSection(section: AppSection): Promise<void> {
       ? "Загружаю локальные заметки..."
       : section === "recommendations"
         ? "Загружаю рекомендации..."
+        : section === "artists"
+          ? "Загружаю заметки артистов..."
+          : section === "tags"
+            ? "Загружаю заметки тегов..."
         : "Открываю раздел...";
   setBusy(true);
   setStatus("loading", "Загрузка", loadingMessage);
@@ -854,6 +981,32 @@ async function selectSong(path: string): Promise<void> {
     render();
   } catch (error) {
     setStatus("error", "Ошибка", error instanceof Error ? error.message : "Не удалось открыть заметку");
+  } finally {
+    setBusy(false);
+  }
+}
+
+async function selectArtist(path: string): Promise<void> {
+  setBusy(true);
+  setStatus("loading", "Загрузка", "Открываю заметку артиста...");
+  try {
+    await controller.selectArtist(path);
+    render();
+  } catch (error) {
+    setStatus("error", "Ошибка", error instanceof Error ? error.message : "Не удалось открыть заметку артиста");
+  } finally {
+    setBusy(false);
+  }
+}
+
+async function selectTag(path: string): Promise<void> {
+  setBusy(true);
+  setStatus("loading", "Загрузка", "Открываю заметку тега...");
+  try {
+    await controller.selectTag(path);
+    render();
+  } catch (error) {
+    setStatus("error", "Ошибка", error instanceof Error ? error.message : "Не удалось открыть заметку тега");
   } finally {
     setBusy(false);
   }
@@ -979,6 +1132,38 @@ homeListKind?.addEventListener("change", () => {
 
 homeListValue?.addEventListener("input", () => {
   controller.setHomeListFilterValue(homeListValue.value);
+});
+
+vaultNoteBody?.addEventListener("click", (event) => {
+  const target = event.target;
+  if (!(target instanceof Element)) {
+    return;
+  }
+
+  const link = target.closest<HTMLAnchorElement>("a[data-track-path]");
+  const trackPath = link?.dataset.trackPath;
+  if (!link || !trackPath) {
+    return;
+  }
+
+  event.preventDefault();
+  void selectSong(trackPath);
+});
+
+recommendationNote?.addEventListener("click", (event) => {
+  const target = event.target;
+  if (!(target instanceof Element)) {
+    return;
+  }
+
+  const link = target.closest<HTMLAnchorElement>("a[data-track-path]");
+  const trackPath = link?.dataset.trackPath;
+  if (!link || !trackPath) {
+    return;
+  }
+
+  event.preventDefault();
+  void selectSong(trackPath);
 });
 
 void activateSection("home");

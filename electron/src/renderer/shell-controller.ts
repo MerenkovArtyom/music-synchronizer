@@ -39,6 +39,11 @@ export interface RecommendationListItem {
   subtitle: string;
 }
 
+export interface VaultNoteListItem {
+  path: string;
+  label: string;
+}
+
 export interface TrackView {
   title: string;
   trackId: string;
@@ -82,6 +87,12 @@ export interface DashboardView {
   topArtists: DashboardData["topArtists"];
 }
 
+export interface VaultNoteView {
+  path: string;
+  title: string;
+  noteBody: string;
+}
+
 export interface HomeListFilter {
   kind: ListTracksRequest["kind"];
   value: string;
@@ -102,6 +113,12 @@ export interface RendererState {
   songItems: SongListItem[];
   selectedSongPath: string | null;
   trackView: TrackView | null;
+  artistItems: VaultNoteListItem[];
+  selectedArtistPath: string | null;
+  artistView: VaultNoteView | null;
+  tagItems: VaultNoteListItem[];
+  selectedTagPath: string | null;
+  tagView: VaultNoteView | null;
   recommendationItems: RecommendationListItem[];
   selectedRecommendationId: string | null;
   recommendationView: DiscoveryView | null;
@@ -408,6 +425,95 @@ function recommendationItemsFromVault(tree: VaultTreeNode[]): RecommendationList
     }));
 }
 
+function noteItemsFromVault(tree: VaultTreeNode[], directory: "artists" | "tags"): VaultNoteListItem[] {
+  return flattenVaultFiles(tree)
+    .filter((item) => item.path.startsWith(`${directory}/`))
+    .map((item) => ({
+      path: item.path,
+      label: item.label,
+    }));
+}
+
+function extractVaultNoteView(note: VaultNoteLike | null): VaultNoteView | null {
+  if (!note) {
+    return null;
+  }
+
+  return {
+    path: note.path,
+    title: cleanText(findHeading(note.content) ?? note.title),
+    noteBody: note.content,
+  };
+}
+
+export function resolveInternalTrackLink(currentPath: string, href: string): string | null {
+  const trimmedHref = href.trim();
+  if (
+    trimmedHref.length === 0
+    || trimmedHref.startsWith("#")
+    || /^[a-z]+:/i.test(trimmedHref)
+    || trimmedHref.startsWith("//")
+  ) {
+    return null;
+  }
+
+  const sanitizedHref = trimmedHref.split("#", 1)[0]?.split("?", 1)[0] ?? "";
+  if (sanitizedHref.length === 0) {
+    return null;
+  }
+  if (sanitizedHref.startsWith("tracks/") && sanitizedHref.endsWith(".md")) {
+    return sanitizedHref;
+  }
+
+  const currentSegments = currentPath.split("/").slice(0, -1);
+  const rawSegments = sanitizedHref.split("/");
+  const resolvedSegments = sanitizedHref.startsWith("/") ? [] : [...currentSegments];
+
+  for (const segment of rawSegments) {
+    if (segment.length === 0 || segment === ".") {
+      continue;
+    }
+    if (segment === "..") {
+      resolvedSegments.pop();
+      continue;
+    }
+    resolvedSegments.push(segment);
+  }
+
+  const resolvedPath = resolvedSegments.join("/");
+  if (resolvedPath.startsWith("tracks/") && resolvedPath.endsWith(".md")) {
+    return resolvedPath;
+  }
+  return null;
+}
+
+export function parseWikiLink(rawLink: string): { target: string; label: string } | null {
+  const match = rawLink.match(/^\[\[([\s\S]+)\]\]$/);
+  if (!match) {
+    return null;
+  }
+
+  const body = match[1]?.trim() ?? "";
+  if (body.length === 0) {
+    return null;
+  }
+
+  const separatorIndex = body.indexOf("|");
+  const target = (separatorIndex >= 0 ? body.slice(0, separatorIndex) : body).trim();
+  const rawLabel = (separatorIndex >= 0 ? body.slice(separatorIndex + 1) : "").trim();
+  if (target.length === 0) {
+    return null;
+  }
+
+  const targetName = target.split("/").pop() ?? target;
+  const label = rawLabel || targetName.replace(/\.md$/i, "");
+  if (label.length === 0) {
+    return null;
+  }
+
+  return { target, label };
+}
+
 function placeholderCopy(section: AppSection): { title: string; body: string } {
   const titles: Record<Exclude<AppSection, "songs" | "recommendations">, string> = {
     home: "Главная",
@@ -442,6 +548,12 @@ export function createRendererController(deps: ControllerDeps) {
     songItems: [],
     selectedSongPath: null,
     trackView: null,
+    artistItems: [],
+    selectedArtistPath: null,
+    artistView: null,
+    tagItems: [],
+    selectedTagPath: null,
+    tagView: null,
     recommendationItems: [],
     selectedRecommendationId: null,
     recommendationView: null,
@@ -504,6 +616,46 @@ export function createRendererController(deps: ControllerDeps) {
     };
   }
 
+  async function loadVaultSection(section: "artists" | "tags", selectedPath?: string): Promise<void> {
+    let payload = await deps.getVaultView(selectedPath ? { selectedPath } : {});
+    let items = noteItemsFromVault(payload.tree, section);
+    let resolvedPath = payload.selectedPath ?? selectedPath ?? items[0]?.path ?? null;
+
+    if (resolvedPath && !resolvedPath.startsWith(`${section}/`)) {
+      resolvedPath = items[0]?.path ?? null;
+    }
+
+    if (!payload.selectedNote && resolvedPath && resolvedPath !== selectedPath) {
+      payload = await deps.getVaultView({ selectedPath: resolvedPath });
+      items = noteItemsFromVault(payload.tree, section);
+      resolvedPath = payload.selectedPath ?? resolvedPath;
+    }
+
+    if (resolvedPath && !resolvedPath.startsWith(`${section}/`)) {
+      resolvedPath = items[0]?.path ?? null;
+    }
+
+    const view = payload.selectedNote ? extractVaultNoteView(payload.selectedNote) : null;
+    if (section === "artists") {
+      state.artistItems = items;
+      state.selectedArtistPath = resolvedPath;
+      state.artistView = view;
+      state.status = {
+        tone: "success",
+        message: items.length > 0 ? "Заметки артистов загружены" : "В папке artists пока нет заметок",
+      };
+      return;
+    }
+
+    state.tagItems = items;
+    state.selectedTagPath = resolvedPath;
+    state.tagView = view;
+    state.status = {
+      tone: "success",
+      message: items.length > 0 ? "Заметки тегов загружены" : "В папке tags пока нет заметок",
+    };
+  }
+
   async function loadDashboard(): Promise<void> {
     const [vaultPayload, dashboardPayload] = await Promise.all([
       deps.getVaultView({ selectedPath: "dashboard.md" }),
@@ -551,6 +703,14 @@ export function createRendererController(deps: ControllerDeps) {
       }
       if (section === "recommendations") {
         await loadRecommendations();
+        return;
+      }
+      if (section === "artists") {
+        await loadVaultSection("artists");
+        return;
+      }
+      if (section === "tags") {
+        await loadVaultSection("tags");
         return;
       }
 
@@ -625,6 +785,14 @@ export function createRendererController(deps: ControllerDeps) {
     async selectSong(path: string): Promise<void> {
       state.activeSection = "songs";
       await loadSongs(path);
+    },
+    async selectArtist(path: string): Promise<void> {
+      state.activeSection = "artists";
+      await loadVaultSection("artists", path);
+    },
+    async selectTag(path: string): Promise<void> {
+      state.activeSection = "tags";
+      await loadVaultSection("tags", path);
     },
     selectRecommendation(trackId: string): void {
       state.selectedRecommendationId = trackId;

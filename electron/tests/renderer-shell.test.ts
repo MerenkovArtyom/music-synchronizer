@@ -6,6 +6,8 @@ import {
   createRendererController,
   extractTrackView,
   formatDuration,
+  parseWikiLink,
+  resolveInternalTrackLink,
   sectionLayoutMode,
 } from "../src/renderer/shell-controller.js";
 
@@ -224,6 +226,51 @@ function makeControllerDeps(overrides: Partial<Parameters<typeof createRendererC
   };
 }
 
+function makeSectionVaultData(
+  section: "artists" | "tags",
+  selectedPath?: string,
+): VaultData {
+  const fileName = section === "artists" ? "Artist A.md" : "rap.md";
+  const filePath = `${section}/${fileName}`;
+  return makeVaultData({
+    tree: [
+      {
+        name: section,
+        path: section,
+        kind: "directory",
+        children: [
+          {
+            name: fileName,
+            path: filePath,
+            kind: "file",
+            children: null,
+          },
+        ],
+      },
+      {
+        name: "tracks",
+        path: "tracks",
+        kind: "directory",
+        children: [
+          {
+            name: "Song A.md",
+            path: "tracks/Song A.md",
+            kind: "file",
+            children: null,
+          },
+        ],
+      },
+    ],
+    selectedPath: selectedPath ?? filePath,
+    selectedNote: {
+      name: fileName,
+      path: selectedPath ?? filePath,
+      title: fileName.replace(/\.md$/i, ""),
+      content: `# ${fileName.replace(/\.md$/i, "")}\n\n- [Song A](tracks/Song A.md)\n`,
+    },
+  });
+}
+
 test("extractTrackView parses frontmatter, note body, and tags for the songs screen", () => {
   const track = extractTrackView(makeVaultData().selectedNote);
 
@@ -330,6 +377,83 @@ test("createRendererController reloads vault data for a selected song", async ()
   assert.equal(controller.getState().selectedSongPath, "tracks/_removed/Old Song.md");
 });
 
+test("createRendererController loads artist notes from the vault when artists tab becomes active", async () => {
+  const calls: string[] = [];
+  const controller = createRendererController(makeControllerDeps({
+    getVaultView: async (request) => {
+      calls.push(`vault:${request.selectedPath ?? ""}`);
+      return makeSectionVaultData("artists", request.selectedPath);
+    },
+  }));
+
+  await controller.activateSection("artists");
+
+  assert.deepEqual(calls, ["vault:"]);
+  assert.equal(controller.getState().activeSection, "artists");
+  assert.deepEqual(
+    controller.getState().artistItems.map((item) => item.path),
+    ["artists/Artist A.md"],
+  );
+  assert.equal(controller.getState().selectedArtistPath, "artists/Artist A.md");
+  assert.equal(controller.getState().artistView?.path, "artists/Artist A.md");
+});
+
+test("createRendererController loads tag notes from the vault when tags tab becomes active", async () => {
+  const calls: string[] = [];
+  const controller = createRendererController(makeControllerDeps({
+    getVaultView: async (request) => {
+      calls.push(`vault:${request.selectedPath ?? ""}`);
+      return makeSectionVaultData("tags", request.selectedPath);
+    },
+  }));
+
+  await controller.activateSection("tags");
+
+  assert.deepEqual(calls, ["vault:"]);
+  assert.equal(controller.getState().activeSection, "tags");
+  assert.deepEqual(
+    controller.getState().tagItems.map((item) => item.path),
+    ["tags/rap.md"],
+  );
+  assert.equal(controller.getState().selectedTagPath, "tags/rap.md");
+  assert.equal(controller.getState().tagView?.path, "tags/rap.md");
+});
+
+test("createRendererController reloads vault data for a selected artist note", async () => {
+  const calls: string[] = [];
+  const controller = createRendererController(makeControllerDeps({
+    getVaultView: async (request) => {
+      calls.push(`vault:${request.selectedPath ?? ""}`);
+      return makeSectionVaultData("artists", request.selectedPath);
+    },
+  }));
+
+  await controller.activateSection("artists");
+  await controller.selectArtist("artists/Artist A.md");
+
+  assert.deepEqual(calls, ["vault:", "vault:artists/Artist A.md"]);
+  assert.equal(controller.getState().selectedArtistPath, "artists/Artist A.md");
+});
+
+test("createRendererController keeps artists and tags empty state stable when no notes are available", async () => {
+  const controller = createRendererController(makeControllerDeps({
+    getVaultView: async () =>
+      makeVaultData({
+        tree: [],
+        selectedPath: null,
+        selectedNote: null,
+      }),
+  }));
+
+  await controller.activateSection("artists");
+  assert.deepEqual(controller.getState().artistItems, []);
+  assert.equal(controller.getState().artistView, null);
+
+  await controller.activateSection("tags");
+  assert.deepEqual(controller.getState().tagItems, []);
+  assert.equal(controller.getState().tagView, null);
+});
+
 test("createRendererController loads recommendation notes from the vault when recommendations tab becomes active", async () => {
   const calls: string[] = [];
   const controller = createRendererController(makeControllerDeps({
@@ -373,6 +497,34 @@ test("createRendererController loads recommendation notes from the vault when re
   assert.equal(controller.getState().activeSection, "recommendations");
   assert.equal(controller.getState().selectedRecommendationId, "recommendations/Popular One.md");
   assert.equal(controller.getState().recommendationItems[0]?.title, "Popular One");
+});
+
+test("resolveInternalTrackLink accepts relative vault links to tracks notes", () => {
+  assert.equal(resolveInternalTrackLink("artists/Artist A.md", "tracks/Song A.md"), "tracks/Song A.md");
+  assert.equal(resolveInternalTrackLink("artists/Artist A.md", "../tracks/Song A.md"), "tracks/Song A.md");
+  assert.equal(resolveInternalTrackLink("tags/rap.md", "../tracks/_removed/Old Song.md"), "tracks/_removed/Old Song.md");
+});
+
+test("resolveInternalTrackLink ignores external and non-track links", () => {
+  assert.equal(resolveInternalTrackLink("artists/Artist A.md", "https://example.com"), null);
+  assert.equal(resolveInternalTrackLink("artists/Artist A.md", "recommendations/Popular One.md"), null);
+  assert.equal(resolveInternalTrackLink("artists/Artist A.md", "#heading"), null);
+});
+
+test("parseWikiLink extracts target and label from obsidian-style links", () => {
+  assert.deepEqual(parseWikiLink("[[tracks/Moscow.md|Moscow]]"), {
+    target: "tracks/Moscow.md",
+    label: "Moscow",
+  });
+  assert.deepEqual(parseWikiLink("[[tracks/Хочу быть как Газан.md]]"), {
+    target: "tracks/Хочу быть как Газан.md",
+    label: "Хочу быть как Газан",
+  });
+});
+
+test("parseWikiLink rejects malformed obsidian-style links", () => {
+  assert.equal(parseWikiLink("[tracks/Moscow.md|Moscow]"), null);
+  assert.equal(parseWikiLink("[[ ]]"), null);
 });
 
 test("createRendererController keeps placeholder sections local and avoids backend calls", async () => {
