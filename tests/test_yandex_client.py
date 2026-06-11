@@ -5,7 +5,11 @@ from types import ModuleType, SimpleNamespace
 import pytest
 
 from music_synchronizer.models import TrackInfo
-from music_synchronizer.yandex_client import YandexMusicClient
+from music_synchronizer.yandex_client import (
+    YandexMusicAuthError,
+    YandexMusicClient,
+    YandexMusicUnavailableError,
+)
 
 
 class _FakeTrackShort:
@@ -197,8 +201,82 @@ def test_fetch_liked_tracks_raises_clear_error_when_likes_are_unavailable(
 
     client = YandexMusicClient(token="token")
 
-    with pytest.raises(RuntimeError, match="Unable to fetch liked tracks from Yandex Music."):
+    with pytest.raises(YandexMusicUnavailableError, match="Yandex Music API is unavailable."):
         client.fetch_liked_tracks()
+
+
+def test_validate_token_uses_account_status(monkeypatch: pytest.MonkeyPatch) -> None:
+    fake_module = ModuleType("yandex_music")
+    calls: list[str] = []
+
+    class FakeClient:
+        def __init__(self, token: str) -> None:
+            self.token = token
+
+        def init(self) -> "FakeClient":
+            return self
+
+        def account_status(self) -> SimpleNamespace:
+            calls.append(self.token)
+            return SimpleNamespace(account=SimpleNamespace(uid=1))
+
+    fake_module.Client = FakeClient
+    monkeypatch.setitem(sys.modules, "yandex_music", fake_module)
+
+    client = YandexMusicClient(token="token")
+    client.validate_token()
+
+    assert calls == ["token"]
+
+
+def test_validate_token_maps_auth_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    fake_module = ModuleType("yandex_music")
+
+    class UnauthorizedError(Exception):
+        pass
+
+    class FakeClient:
+        def __init__(self, token: str) -> None:
+            self.token = token
+
+        def init(self) -> "FakeClient":
+            return self
+
+        def account_status(self) -> None:
+            raise UnauthorizedError("bad token")
+
+    fake_module.Client = FakeClient
+    monkeypatch.setitem(sys.modules, "yandex_music", fake_module)
+
+    client = YandexMusicClient(token="token")
+
+    with pytest.raises(YandexMusicAuthError):
+        client.validate_token()
+
+
+def test_validate_token_maps_network_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    fake_module = ModuleType("yandex_music")
+
+    class NetworkError(Exception):
+        pass
+
+    class FakeClient:
+        def __init__(self, token: str) -> None:
+            self.token = token
+
+        def init(self) -> "FakeClient":
+            return self
+
+        def account_status(self) -> None:
+            raise NetworkError("service unavailable")
+
+    fake_module.Client = FakeClient
+    monkeypatch.setitem(sys.modules, "yandex_music", fake_module)
+
+    client = YandexMusicClient(token="token")
+
+    with pytest.raises(YandexMusicUnavailableError):
+        client.validate_token()
 
 
 def test_fetch_liked_tracks_populates_monthly_listens_from_recent_history(

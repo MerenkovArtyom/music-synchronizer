@@ -243,3 +243,12 @@
 - В `music-sync-app` добавлена новая JSON-only команда `save-config`, а `show-config` расширен до полного editable payload.
 - Renderer получил first-run gating: без токена и `Obsidian vault path` приложение открывается на экране настроек и не даёт запускать sync.
 - В desktop UI добавлен системный folder picker для выбора vault и обновлены TypeScript/Python тесты, schemas, README и сборка Electron.
+
+### Commit 34: add onboarding states and token validation on save
+
+- В desktop UI добавлена явная модель состояний для первого запуска, частично заполненной конфигурации, recoverable action errors и dev-environment ошибок.
+- Первый запуск теперь показывает welcome screen с объяснением, что приложение синхронизирует лайки Яндекс Музыки в Obsidian, и с шагами настройки.
+- `save-config` стал атомарным: backend сначала валидирует токен Яндекс Музыки и только потом записывает `config.env`.
+- Во время сохранения интерфейс показывает отдельный loading state с пояснением, что сейчас идёт проверка токена и доступа к аккаунту.
+- Ошибки `invalid token`, `Yandex API unavailable`, `backend not found` и `uv/python not found` нормализованы в стабильные коды и показываются пользователю с понятными следующими шагами.
+- README, Electron README, Python tests, Electron tests и typecheck обновлены под новый onboarding и save-validation flow.

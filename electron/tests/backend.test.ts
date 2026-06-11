@@ -20,6 +20,7 @@ import {
   parseBackendCommandEnv,
   resolveBackendCommand,
   resolveBackendRuntime,
+  runBackendCommand,
 } from "../src/main/backend.js";
 
 test("parseBackendCommandEnv accepts a JSON string array", () => {
@@ -459,4 +460,68 @@ test("normalizeBackendEnvelope rejects a payload with mismatched command", () =>
 
   assert.equal(envelope.error.code, "BACKEND_INVALID_OUTPUT");
   assert.match(envelope.error.message, /schema/i);
+});
+
+test("runBackendCommand maps missing dev uv runtime to a stable error", async () => {
+  const envelope = await runBackendCommand(
+    "show-config",
+    undefined,
+    {
+      MUSIC_SYNC_BACKEND_COMMAND: '["uv","run","music-sync-app"]',
+      MUSIC_SYNC_REPO_ROOT: process.cwd(),
+      PATH: "",
+    },
+    {
+      isPackaged: false,
+      appPath: "/Applications/Music Sync.app/Contents/Resources/app.asar",
+    },
+  );
+
+  assert.equal(envelope.ok, false);
+  if (envelope.ok) {
+    throw new Error("expected error envelope");
+  }
+  assert.equal(envelope.error.code, "DEV_RUNTIME_NOT_FOUND");
+  assert.match(envelope.error.message, /uv/i);
+});
+
+test("runBackendCommand maps missing dev python runtime to a stable error", async () => {
+  const envelope = await runBackendCommand(
+    "show-config",
+    undefined,
+    {
+      MUSIC_SYNC_BACKEND_COMMAND: '["python","-m","music_synchronizer.backend_cli"]',
+      MUSIC_SYNC_REPO_ROOT: process.cwd(),
+      PATH: "",
+    },
+    {
+      isPackaged: false,
+      appPath: "/Applications/Music Sync.app/Contents/Resources/app.asar",
+    },
+  );
+
+  assert.equal(envelope.ok, false);
+  if (envelope.ok) {
+    throw new Error("expected error envelope");
+  }
+  assert.equal(envelope.error.code, "DEV_RUNTIME_NOT_FOUND");
+  assert.match(envelope.error.message, /python/i);
+});
+
+test("runBackendCommand maps missing packaged backend binary to a stable error", async () => {
+  const envelope = await runBackendCommand(
+    "show-config",
+    undefined,
+    {},
+    {
+      isPackaged: true,
+      appPath: "/tmp/Music Sync.app/Contents/Resources/app.asar",
+    },
+  );
+
+  assert.equal(envelope.ok, false);
+  if (envelope.ok) {
+    throw new Error("expected error envelope");
+  }
+  assert.equal(envelope.error.code, "BACKEND_BINARY_NOT_FOUND");
 });

@@ -18,6 +18,7 @@ import {
   type RendererState,
   sectionLayoutMode,
   type TrackView,
+  type UiState,
   resolveInternalTrackLink,
   type VaultNoteListItem,
   type VaultNoteView,
@@ -46,6 +47,13 @@ const settingsLogLevel = document.querySelector<HTMLSelectElement>("#settings-lo
 const settingsChooseVaultButton = document.querySelector<HTMLButtonElement>("#settings-choose-vault");
 const settingsSaveButton = document.querySelector<HTMLButtonElement>("#settings-save-button");
 const settingsHint = document.querySelector<HTMLElement>("#settings-hint");
+const settingsStatePanel = document.querySelector<HTMLElement>("#settings-state-panel");
+const settingsStateKicker = document.querySelector<HTMLElement>("#settings-state-kicker");
+const settingsStateTitle = document.querySelector<HTMLElement>("#settings-state-title");
+const settingsStateMessage = document.querySelector<HTMLElement>("#settings-state-message");
+const settingsStateSteps = document.querySelector<HTMLElement>("#settings-state-steps");
+const settingsStateDetails = document.querySelector<HTMLElement>("#settings-state-details");
+const settingsStateAction = document.querySelector<HTMLButtonElement>("#settings-state-action");
 
 const homeView = document.querySelector<HTMLElement>("#home-view");
 const homeSyncButton = document.querySelector<HTMLButtonElement>("#home-sync-button");
@@ -59,6 +67,13 @@ const homeSyncSummary = document.querySelector<HTMLElement>("#home-sync-summary"
 const homeRecommendationsList = document.querySelector<HTMLElement>("#home-recommendations-list");
 const homeDiscoverySummary = document.querySelector<HTMLElement>("#home-discovery-summary");
 const homeListResult = document.querySelector<HTMLElement>("#home-list-result");
+const homeStatePanel = document.querySelector<HTMLElement>("#home-state-panel");
+const homeStateKicker = document.querySelector<HTMLElement>("#home-state-kicker");
+const homeStateTitle = document.querySelector<HTMLElement>("#home-state-title");
+const homeStateMessage = document.querySelector<HTMLElement>("#home-state-message");
+const homeStateSteps = document.querySelector<HTMLElement>("#home-state-steps");
+const homeStateDetails = document.querySelector<HTMLElement>("#home-state-details");
+const homeStateAction = document.querySelector<HTMLButtonElement>("#home-state-action");
 
 const dashboardView = document.querySelector<HTMLElement>("#dashboard-view");
 const dashboardTab = document.querySelector<HTMLElement>("#dashboard-tab");
@@ -115,6 +130,32 @@ function errorSummary<T>(result: BackendEnvelope<T>): string {
   return `${result.error.code}: ${result.error.message}`;
 }
 
+class RendererBackendError extends Error {
+  code: string;
+  command: string;
+  details: Record<string, unknown>;
+
+  constructor(command: string, code: string, message: string, details: Record<string, unknown>) {
+    super(message);
+    this.name = "RendererBackendError";
+    this.command = command;
+    this.code = code;
+    this.details = details;
+  }
+}
+
+function unwrapEnvelope<T>(result: BackendEnvelope<T>): T {
+  if (result.ok) {
+    return result.data;
+  }
+  throw new RendererBackendError(
+    result.command,
+    result.error.code,
+    result.error.message,
+    result.error.details,
+  );
+}
+
 function setBusy(isBusy: boolean): void {
   document.body.dataset.busy = String(isBusy);
   for (const navItem of navItems) {
@@ -133,83 +174,43 @@ function setStatus(tone: "idle" | "loading" | "success" | "placeholder" | "error
 }
 
 async function expectVaultData(): Promise<VaultData> {
-  const result = await window.musicSync.getVaultView({});
-  if (!result.ok) {
-    throw new Error(errorSummary(result));
-  }
-  return result.data;
+  return unwrapEnvelope(await window.musicSync.getVaultView({}));
 }
 
 async function expectConfigData(): Promise<ConfigData> {
-  const result = await window.musicSync.showConfig();
-  if (!result.ok) {
-    throw new Error(errorSummary(result));
-  }
-  return result.data;
+  return unwrapEnvelope(await window.musicSync.showConfig());
 }
 
 async function saveConfig(request: SaveConfigRequest): Promise<ConfigData> {
-  const result = await window.musicSync.saveConfig(request);
-  if (!result.ok) {
-    throw new Error(errorSummary(result));
-  }
-  return result.data;
+  return unwrapEnvelope(await window.musicSync.saveConfig(request));
 }
 
 async function expectVaultSelection(selectedPath: string): Promise<VaultData> {
-  const result = await window.musicSync.getVaultView({ selectedPath });
-  if (!result.ok) {
-    throw new Error(errorSummary(result));
-  }
-  return result.data;
+  return unwrapEnvelope(await window.musicSync.getVaultView({ selectedPath }));
 }
 
 async function expectRecommendationsVault(request: { selectedPath?: string } = {}): Promise<VaultData> {
-  const result = await window.musicSync.getVaultView(request);
-  if (!result.ok) {
-    throw new Error(errorSummary(result));
-  }
-  return result.data;
+  return unwrapEnvelope(await window.musicSync.getVaultView(request));
 }
 
 async function expectDashboardData() {
-  const result = await window.musicSync.getDashboard();
-  if (!result.ok) {
-    throw new Error(errorSummary(result));
-  }
-  return result.data;
+  return unwrapEnvelope(await window.musicSync.getDashboard());
 }
 
 async function expectSyncData(): Promise<SyncData> {
-  const result = await window.musicSync.runSync();
-  if (!result.ok) {
-    throw new Error(errorSummary(result));
-  }
-  return result.data;
+  return unwrapEnvelope(await window.musicSync.runSync());
 }
 
 async function expectRecommendationData(): Promise<RecommendationData> {
-  const result = await window.musicSync.getRecommendations({ archived: false });
-  if (!result.ok) {
-    throw new Error(errorSummary(result));
-  }
-  return result.data;
+  return unwrapEnvelope(await window.musicSync.getRecommendations({ archived: false }));
 }
 
 async function expectDiscoveryData(clear: boolean): Promise<DiscoveryData> {
-  const result = await window.musicSync.getDiscoveryRecommendations({ clear });
-  if (!result.ok) {
-    throw new Error(errorSummary(result));
-  }
-  return result.data;
+  return unwrapEnvelope(await window.musicSync.getDiscoveryRecommendations({ clear }));
 }
 
 async function expectListData(kind: "tag" | "artist", value: string): Promise<ListData> {
-  const result = await window.musicSync.listTracks({ kind, value });
-  if (!result.ok) {
-    throw new Error(errorSummary(result));
-  }
-  return result.data;
+  return unwrapEnvelope(await window.musicSync.listTracks({ kind, value }));
 }
 
 const controller = createRendererController({
@@ -794,6 +795,16 @@ function renderHomeView(state: RendererState): void {
   homeRecommendButton?.toggleAttribute("disabled", actionsDisabled);
   homeDiscoveryButton?.toggleAttribute("disabled", actionsDisabled);
   homeDiscoveryClearButton?.toggleAttribute("disabled", actionsDisabled);
+  renderUiStatePanel(
+    homeStatePanel,
+    homeStateKicker,
+    homeStateTitle,
+    homeStateMessage,
+    homeStateSteps,
+    homeStateDetails,
+    homeStateAction,
+    state.activeSection === "home" ? state.uiState : null,
+  );
 }
 
 function syncDraftFromConfig(config: ConfigValues): void {
@@ -820,15 +831,88 @@ function renderSettingsView(state: RendererState): void {
     settingsLogLevel.value = settingsDraft.logLevel;
   }
   if (settingsHint) {
-    settingsHint.textContent = state.setupIncomplete
+    settingsHint.textContent = state.uiState?.kind === "settingsValidationInProgress"
+      ? "Сначала проверяю токен, затем сохраню настройки."
+      : state.setupIncomplete
       ? "Токен и vault path обязательны для первого запуска."
       : settingsDirty
         ? "Есть несохранённые изменения."
         : "Настройки сохранены в пользовательский config path.";
   }
   if (settingsSaveButton) {
-    settingsSaveButton.disabled = !settingsDirty;
+    settingsSaveButton.disabled = !settingsDirty || state.uiState?.kind === "settingsValidationInProgress";
   }
+  if (settingsChooseVaultButton) {
+    settingsChooseVaultButton.disabled = state.uiState?.kind === "settingsValidationInProgress";
+  }
+  renderUiStatePanel(
+    settingsStatePanel,
+    settingsStateKicker,
+    settingsStateTitle,
+    settingsStateMessage,
+    settingsStateSteps,
+    settingsStateDetails,
+    settingsStateAction,
+    state.activeSection === "settings" ? state.uiState : null,
+  );
+}
+
+function renderUiStatePanel(
+  panel: HTMLElement | null,
+  kicker: HTMLElement | null,
+  title: HTMLElement | null,
+  message: HTMLElement | null,
+  steps: HTMLElement | null,
+  details: HTMLElement | null,
+  actionButton: HTMLButtonElement | null,
+  uiState: UiState | null,
+): void {
+  if (!panel || !title || !message || !steps || !details || !actionButton) {
+    return;
+  }
+
+  panel.hidden = uiState === null;
+  if (!uiState) {
+    return;
+  }
+
+  if (kicker) {
+    kicker.textContent =
+      uiState.kind === "firstRunWelcome"
+        ? "Первый запуск"
+        : uiState.kind === "settingsValidationInProgress"
+          ? "Проверка"
+          : uiState.kind === "devEnvironmentError"
+            ? "Dev environment"
+            : "Состояние";
+  }
+  title.textContent = uiState.title;
+  message.textContent = uiState.message;
+
+  steps.innerHTML = "";
+  for (const step of uiState.nextSteps) {
+    const row = document.createElement("p");
+    row.className = "state-step";
+    row.textContent = step;
+    steps.appendChild(row);
+  }
+
+  details.hidden = uiState.details.length === 0;
+  details.innerHTML = "";
+  for (const item of uiState.details) {
+    const row = document.createElement("p");
+    row.className = "state-detail";
+    row.textContent = item;
+    details.appendChild(row);
+  }
+
+  actionButton.hidden = !uiState.actionLabel || !uiState.actionTarget;
+  actionButton.textContent = uiState.actionLabel ?? "";
+  actionButton.onclick = uiState.actionTarget
+    ? () => {
+        void activateSection(uiState.actionTarget as AppSection);
+      }
+    : null;
 }
 
 function renderNavigation(activeSection: AppSection): void {
@@ -1074,7 +1158,7 @@ async function activateSection(section: AppSection): Promise<void> {
     await controller.activateSection(section);
     render();
   } catch (error) {
-    setStatus("error", "Ошибка", error instanceof Error ? error.message : "Не удалось обновить экран");
+    handleUiError(error, "Не удалось обновить экран");
   } finally {
     setBusy(false);
   }
@@ -1083,19 +1167,30 @@ async function activateSection(section: AppSection): Promise<void> {
 function updateSettingsDraft(patch: Partial<SaveConfigRequest>): void {
   settingsDraft = { ...settingsDraft, ...patch };
   settingsDirty = true;
+  controller.clearUiState();
   renderSettingsView(controller.getState());
+}
+
+function handleUiError(error: unknown, fallbackMessage: string): void {
+  if (error instanceof RendererBackendError) {
+    controller.showBackendError(error.code, error.message, error.details);
+    render();
+    return;
+  }
+  setStatus("error", "Ошибка", error instanceof Error ? error.message : fallbackMessage);
 }
 
 async function saveSettings(): Promise<void> {
   setBusy(true);
-  setStatus("loading", "Сохранение", "Сохраняю настройки...");
+  controller.beginSettingsValidation();
+  render();
   try {
     const payload = await saveConfig(settingsDraft);
     controller.setConfig(payload.config);
     syncDraftFromConfig(payload.config);
     render();
   } catch (error) {
-    setStatus("error", "Ошибка", error instanceof Error ? error.message : "Не удалось сохранить настройки");
+    handleUiError(error, "Не удалось сохранить настройки");
   } finally {
     setBusy(false);
   }
@@ -1108,7 +1203,7 @@ async function selectSong(path: string): Promise<void> {
     await controller.selectSong(path);
     render();
   } catch (error) {
-    setStatus("error", "Ошибка", error instanceof Error ? error.message : "Не удалось открыть заметку");
+    handleUiError(error, "Не удалось открыть заметку");
   } finally {
     setBusy(false);
   }
@@ -1121,7 +1216,7 @@ async function selectArtist(path: string): Promise<void> {
     await controller.selectArtist(path);
     render();
   } catch (error) {
-    setStatus("error", "Ошибка", error instanceof Error ? error.message : "Не удалось открыть заметку артиста");
+    handleUiError(error, "Не удалось открыть заметку артиста");
   } finally {
     setBusy(false);
   }
@@ -1134,7 +1229,7 @@ async function selectTag(path: string): Promise<void> {
     await controller.selectTag(path);
     render();
   } catch (error) {
-    setStatus("error", "Ошибка", error instanceof Error ? error.message : "Не удалось открыть заметку тега");
+    handleUiError(error, "Не удалось открыть заметку тега");
   } finally {
     setBusy(false);
   }
@@ -1147,7 +1242,7 @@ async function openRecommendation(path: string): Promise<void> {
     await controller.openRecommendation(path);
     render();
   } catch (error) {
-    setStatus("error", "Ошибка", error instanceof Error ? error.message : "Не удалось открыть рекомендацию");
+    handleUiError(error, "Не удалось открыть рекомендацию");
   } finally {
     setBusy(false);
   }
@@ -1160,7 +1255,7 @@ async function runHomeSync(): Promise<void> {
     await controller.runHomeSync();
     render();
   } catch (error) {
-    setStatus("error", "Ошибка", error instanceof Error ? error.message : "Не удалось выполнить sync");
+    handleUiError(error, "Не удалось выполнить sync");
   } finally {
     setBusy(false);
   }
@@ -1173,7 +1268,7 @@ async function loadHomeRecommendations(): Promise<void> {
     await controller.loadHomeRecommendations();
     render();
   } catch (error) {
-    setStatus("error", "Ошибка", error instanceof Error ? error.message : "Не удалось получить рекомендации");
+    handleUiError(error, "Не удалось получить рекомендации");
   } finally {
     setBusy(false);
   }
@@ -1194,15 +1289,7 @@ async function runHomeDiscovery(clear: boolean): Promise<void> {
     }
     render();
   } catch (error) {
-    setStatus(
-      "error",
-      "Ошибка",
-      error instanceof Error
-        ? error.message
-        : clear
-          ? "Не удалось очистить discovery"
-          : "Не удалось выполнить discovery",
-    );
+    handleUiError(error, clear ? "Не удалось очистить discovery" : "Не удалось выполнить discovery");
   } finally {
     setBusy(false);
   }
@@ -1217,7 +1304,7 @@ async function runHomeList(): Promise<void> {
     await controller.runHomeList();
     render();
   } catch (error) {
-    setStatus("error", "Ошибка", error instanceof Error ? error.message : "Не удалось построить список");
+    handleUiError(error, "Не удалось построить список");
   } finally {
     setBusy(false);
   }
@@ -1337,6 +1424,6 @@ void (async () => {
     const initialSection: AppSection = controller.getState().setupIncomplete ? "settings" : "home";
     await activateSection(initialSection);
   } catch (error) {
-    setStatus("error", "Ошибка", error instanceof Error ? error.message : "Не удалось загрузить настройки");
+    handleUiError(error, "Не удалось загрузить настройки");
   }
 })();

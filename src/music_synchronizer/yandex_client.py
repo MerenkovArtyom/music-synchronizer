@@ -8,6 +8,14 @@ from typing import Any
 from music_synchronizer.models import DiscoveryTrackInfo, TrackInfo
 
 
+class YandexMusicAuthError(RuntimeError):
+    pass
+
+
+class YandexMusicUnavailableError(RuntimeError):
+    pass
+
+
 @dataclass(frozen=True, slots=True)
 class _PlaylistTrackEntry:
     track_id: str
@@ -27,6 +35,26 @@ class YandexMusicClient:
         self.token = token
         self._seed_artists_by_track_id: dict[str, list[Any]] = {}
 
+    def validate_token(self) -> None:
+        client = self._create_client()
+        status_method = getattr(client, "account_status", None)
+        if not callable(status_method):
+            status_method = getattr(client, "users_likes_tracks", None)
+
+        if not callable(status_method):
+            raise RuntimeError("Unable to validate Yandex Music token.")
+
+        try:
+            status = status_method()
+        except Exception as error:
+            raise self._map_client_error(
+                error,
+                default_message="Unable to validate Yandex Music token.",
+            ) from error
+
+        if status is None:
+            raise YandexMusicAuthError("Yandex Music token is invalid.")
+
     def fetch_liked_tracks(self, reference_time: datetime | None = None) -> list[TrackInfo]:
         client = self._create_client()
         if reference_time is None:
@@ -35,7 +63,10 @@ class YandexMusicClient:
         try:
             likes = client.users_likes_tracks()
         except Exception as error:
-            raise RuntimeError("Unable to fetch liked tracks from Yandex Music.") from error
+            raise self._map_client_error(
+                error,
+                default_message="Unable to fetch liked tracks from Yandex Music.",
+            ) from error
         monthly_listens = self._fetch_monthly_listens(client, reference_time)
 
         raw_tracks = getattr(likes, "tracks", likes)
@@ -233,6 +264,25 @@ class YandexMusicClient:
             ) from error
 
         return module.Client
+
+    def _map_client_error(self, error: Exception, *, default_message: str) -> Exception:
+        error_type = type(error).__name__
+        lowered_message = str(error).casefold()
+
+        if error_type == "UnauthorizedError" or "unauthorized" in lowered_message or "bad token" in lowered_message:
+            return YandexMusicAuthError("Yandex Music token is invalid.")
+
+        if (
+            error_type in {"NetworkError", "TimedOutError", "ConnectionError"}
+            or "network" in lowered_message
+            or "timed out" in lowered_message
+            or "timeout" in lowered_message
+            or "service unavailable" in lowered_message
+            or "connection" in lowered_message
+        ):
+            return YandexMusicUnavailableError("Yandex Music API is unavailable.")
+
+        return RuntimeError(default_message)
 
     def _normalize_track(self, track: Any, position: int, monthly_listens: int | None = None) -> TrackInfo:
         track_id = str(track.id)

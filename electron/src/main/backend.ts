@@ -126,6 +126,49 @@ export class BackendRunnerError extends Error {
   }
 }
 
+function normalizeProcessStartError(
+  error: NodeJS.ErrnoException,
+  invocation: BackendInvocation,
+  context: BackendRuntimeContext,
+): BackendRunnerError {
+  const commandName = invocation.command;
+  const details = {
+    command: invocation.command,
+    args: invocation.args,
+    cwd: invocation.cwd,
+  };
+
+  if (error.code === "ENOENT") {
+    if (context.isPackaged) {
+      return new BackendRunnerError(
+        "BACKEND_BINARY_NOT_FOUND",
+        `Packaged backend binary was not found: ${commandName}`,
+        details,
+      );
+    }
+
+    if (commandName === "uv" || commandName === "python" || commandName === "python3") {
+      return new BackendRunnerError(
+        "DEV_RUNTIME_NOT_FOUND",
+        `Required development runtime was not found: ${commandName}`,
+        details,
+      );
+    }
+
+    return new BackendRunnerError(
+      "BACKEND_UNAVAILABLE",
+      `Failed to start backend command: ${commandName}`,
+      details,
+    );
+  }
+
+  return new BackendRunnerError(
+    "BACKEND_PROCESS_ERROR",
+    `Failed to start backend process: ${error.message}`,
+    details,
+  );
+}
+
 function isRelativeCommandToken(value: string): boolean {
   return value.startsWith("./") || value.startsWith("../");
 }
@@ -400,7 +443,11 @@ export function normalizeBackendEnvelope(
   return payload as BackendEnvelope<BackendData>;
 }
 
-function runProcess(invocation: BackendInvocation, env: BackendRuntimeEnv): Promise<BackendProcessResult> {
+function runProcess(
+  invocation: BackendInvocation,
+  env: BackendRuntimeEnv,
+  context: BackendRuntimeContext,
+): Promise<BackendProcessResult> {
   return new Promise((resolve, reject) => {
     const child = spawn(invocation.command, invocation.args, {
       cwd: invocation.cwd,
@@ -420,17 +467,7 @@ function runProcess(invocation: BackendInvocation, env: BackendRuntimeEnv): Prom
     });
 
     child.on("error", (error) => {
-      reject(
-        new BackendRunnerError(
-          "BACKEND_PROCESS_ERROR",
-          `Failed to start backend process: ${error.message}`,
-          {
-            command: invocation.command,
-            args: invocation.args,
-            cwd: invocation.cwd,
-          },
-        ),
-      );
+      reject(normalizeProcessStartError(error as NodeJS.ErrnoException, invocation, context));
     });
 
     child.on("close", (exitCode) => {
@@ -459,7 +496,7 @@ export async function runBackendCommand(
       args: [...runtime.command.slice(1), command, ...buildRequestArgs(command, request)],
       cwd: runtime.cwd,
     };
-    const result = await runProcess(invocation, env);
+    const result = await runProcess(invocation, env, context);
     return normalizeBackendEnvelope(command, result, request);
   } catch (error) {
     if (error instanceof BackendRunnerError) {

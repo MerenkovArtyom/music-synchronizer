@@ -316,7 +316,11 @@ test("createRendererController exposes settings as the first-run section when se
 
   assert.equal(controller.getState().activeSection, "settings");
   assert.equal(controller.getState().setupIncomplete, true);
-  assert.equal(controller.getState().status.message, "Заполните токен и путь к vault в настройках.");
+  assert.equal(
+    controller.getState().status.message,
+    "Приложение синхронизирует лайки Яндекс Музыки в ваш Obsidian vault и сохраняет их как локальные заметки.",
+  );
+  assert.equal(controller.getState().uiState?.kind, "firstRunWelcome");
 });
 
 test("createRendererController filters songs tab down to tracks paths only", async () => {
@@ -631,6 +635,60 @@ test("createRendererController blocks sync actions until setup is complete", asy
 
   await assert.rejects(() => controller.runHomeSync(), /settings/i);
   assert.equal(controller.getState().status.tone, "placeholder");
+});
+
+test("createRendererController exposes first-run welcome state when token and vault are both missing", () => {
+  const controller = createRendererController(makeControllerDeps());
+
+  controller.setConfig({
+    yandexMusicToken: "",
+    yandexMusicTokenPresent: false,
+    obsidianVaultPath: "",
+    discoveryPlaylistName: "Рекомендации",
+    logLevel: "INFO",
+  });
+
+  assert.equal(controller.getState().uiState?.kind, "firstRunWelcome");
+  assert.match(controller.getState().uiState?.message ?? "", /синхронизирует лайки/i);
+});
+
+test("createRendererController exposes partial setup state when token is missing", () => {
+  const controller = createRendererController(makeControllerDeps());
+
+  controller.setConfig({
+    yandexMusicToken: "",
+    yandexMusicTokenPresent: false,
+    obsidianVaultPath: "/tmp/vault",
+    discoveryPlaylistName: "Рекомендации",
+    logLevel: "INFO",
+  });
+
+  assert.equal(controller.getState().uiState?.kind, "setupGap");
+  assert.match(controller.getState().uiState?.title ?? "", /токен/i);
+});
+
+test("createRendererController exposes partial setup state when vault is missing", () => {
+  const controller = createRendererController(makeControllerDeps());
+
+  controller.setConfig({
+    yandexMusicToken: "token",
+    yandexMusicTokenPresent: true,
+    obsidianVaultPath: "",
+    discoveryPlaylistName: "Рекомендации",
+    logLevel: "INFO",
+  });
+
+  assert.equal(controller.getState().uiState?.kind, "setupGap");
+  assert.match(controller.getState().uiState?.title ?? "", /vault/i);
+});
+
+test("createRendererController exposes validation progress copy while settings token is being checked", () => {
+  const controller = createRendererController(makeControllerDeps());
+
+  controller.beginSettingsValidation();
+
+  assert.equal(controller.getState().uiState?.kind, "settingsValidationInProgress");
+  assert.match(controller.getState().status.message, /проверяю токен/i);
 });
 
 test("createRendererController loads dashboard note and summary when dashboard tab becomes active", async () => {

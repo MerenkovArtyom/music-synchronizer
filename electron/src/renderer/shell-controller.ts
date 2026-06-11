@@ -25,8 +25,26 @@ export type AppSection =
 export type SectionLayoutMode = "default" | "dashboard" | "home" | "settings";
 
 export interface RendererStatus {
-  tone: "idle" | "loading" | "success" | "placeholder";
+  tone: "idle" | "loading" | "success" | "placeholder" | "error";
   message: string;
+}
+
+export type UiStateKind =
+  | "firstRunWelcome"
+  | "setupGap"
+  | "actionError"
+  | "devEnvironmentError"
+  | "ready"
+  | "settingsValidationInProgress";
+
+export interface UiState {
+  kind: UiStateKind;
+  title: string;
+  message: string;
+  nextSteps: string[];
+  actionLabel: string | null;
+  actionTarget: AppSection | null;
+  details: string[];
 }
 
 export interface SongListItem {
@@ -115,6 +133,7 @@ export interface SettingsState {
 export interface RendererState {
   activeSection: AppSection;
   status: RendererStatus;
+  uiState: UiState | null;
   settings: SettingsState;
   setupIncomplete: boolean;
   home: HomeState;
@@ -159,6 +178,139 @@ export function sectionLayoutMode(section: AppSection): SectionLayoutMode {
 
 function isSetupIncomplete(config: ConfigValues): boolean {
   return config.yandexMusicToken.trim() === "" || config.obsidianVaultPath.trim() === "";
+}
+
+function makeUiState(partial: UiState): UiState {
+  return partial;
+}
+
+function setupUiState(config: ConfigValues): UiState | null {
+  const tokenMissing = config.yandexMusicToken.trim() === "";
+  const vaultMissing = config.obsidianVaultPath.trim() === "";
+  if (!tokenMissing && !vaultMissing) {
+    return null;
+  }
+  if (tokenMissing && vaultMissing) {
+    return makeUiState({
+      kind: "firstRunWelcome",
+      title: "Добро пожаловать в Music Synchronizer",
+      message: "Приложение синхронизирует лайки Яндекс Музыки в ваш Obsidian vault и сохраняет их как локальные заметки.",
+      nextSteps: [
+        "Добавьте токен Яндекс Музыки.",
+        "Выберите папку Obsidian vault.",
+        "Сохраните настройки и запустите sync.",
+      ],
+      actionLabel: "Открыть настройки",
+      actionTarget: "settings",
+      details: [],
+    });
+  }
+  if (tokenMissing) {
+    return makeUiState({
+      kind: "setupGap",
+      title: "Не хватает токена Яндекс Музыки",
+      message: "Чтобы подключиться к библиотеке, добавьте токен и сохраните настройки.",
+      nextSteps: [
+        "Вставьте токен Яндекс Музыки в настройках.",
+        "Сохраните настройки после проверки токена.",
+      ],
+      actionLabel: "Открыть настройки",
+      actionTarget: "settings",
+      details: [],
+    });
+  }
+  return makeUiState({
+    kind: "setupGap",
+    title: "Не выбран Obsidian vault",
+    message: "Приложению нужна папка vault, чтобы складывать синхронизированные заметки.",
+    nextSteps: [
+      "Выберите папку Obsidian vault в настройках.",
+      "Сохраните настройки после проверки токена.",
+    ],
+    actionLabel: "Открыть настройки",
+    actionTarget: "settings",
+    details: [],
+  });
+}
+
+function backendErrorUiState(code: string, message: string, details: Record<string, unknown> = {}): UiState {
+  if (code === "DEV_RUNTIME_NOT_FOUND") {
+    return makeUiState({
+      kind: "devEnvironmentError",
+      title: "Не найдено runtime-окружение для dev-режима",
+      message: "Desktop shell не смог запустить локальный backend, потому что не найден `uv` или `python`.",
+      nextSteps: [
+        "Проверьте, что нужная команда доступна в PATH.",
+        "Перезапустите приложение после исправления окружения.",
+      ],
+      actionLabel: "Открыть настройки",
+      actionTarget: "settings",
+      details: [message],
+    });
+  }
+  if (code === "BACKEND_BINARY_NOT_FOUND" || code === "BACKEND_UNAVAILABLE") {
+    return makeUiState({
+      kind: "devEnvironmentError",
+      title: "Не удалось найти backend",
+      message: "Приложение не нашло исполняемый backend и не может выполнить команду.",
+      nextSteps: [
+        "Проверьте команду запуска backend или packaged resources.",
+        "Перезапустите приложение после исправления сборки или конфигурации.",
+      ],
+      actionLabel: "Открыть настройки",
+      actionTarget: "settings",
+      details: [message],
+    });
+  }
+  if (code === "YANDEX_AUTH_INVALID") {
+    return makeUiState({
+      kind: "actionError",
+      title: "Токен Яндекс Музыки не подошёл",
+      message,
+      nextSteps: [
+        "Проверьте токен Яндекс Музыки.",
+        "Сохраните настройки заново после исправления.",
+      ],
+      actionLabel: "Открыть настройки",
+      actionTarget: "settings",
+      details: [],
+    });
+  }
+  if (code === "YANDEX_API_UNAVAILABLE") {
+    return makeUiState({
+      kind: "actionError",
+      title: "Яндекс Музыка сейчас недоступна",
+      message,
+      nextSteps: [
+        "Проверьте сеть или VPN, если он нужен.",
+        "Повторите действие позже.",
+      ],
+      actionLabel: null,
+      actionTarget: null,
+      details: [],
+    });
+  }
+  if (code === "SETUP_MISSING_TOKEN" || code === "SETUP_MISSING_VAULT") {
+    return makeUiState({
+      kind: "setupGap",
+      title: code === "SETUP_MISSING_TOKEN" ? "Не хватает токена Яндекс Музыки" : "Не выбран Obsidian vault",
+      message,
+      nextSteps: ["Откройте настройки и заполните обязательные поля."],
+      actionLabel: "Открыть настройки",
+      actionTarget: "settings",
+      details: [],
+    });
+  }
+  const technicalDetails = Object.values(details).map((value) => String(value));
+  return makeUiState({
+    kind: "actionError",
+    title: "Не удалось выполнить действие",
+    message,
+    nextSteps: ["Попробуйте снова. Если ошибка повторяется, проверьте настройки и backend."],
+    actionLabel: null,
+    actionTarget: null,
+    details: technicalDetails,
+  });
 }
 
 export function formatDuration(durationSeconds: number): string {
@@ -551,6 +703,7 @@ export function createRendererController(deps: ControllerDeps) {
       tone: "idle",
       message: "Готово к загрузке библиотеки",
     },
+    uiState: null,
     settings: {
       config: {
         yandexMusicToken: "",
@@ -715,6 +868,7 @@ export function createRendererController(deps: ControllerDeps) {
     }
 
     state.activeSection = "settings";
+    state.uiState = setupUiState(state.settings.config);
     state.status = {
       tone: "placeholder",
       message: "Заполните токен и путь к vault в настройках.",
@@ -729,15 +883,17 @@ export function createRendererController(deps: ControllerDeps) {
     setConfig(config: ConfigValues): void {
       state.settings.config = { ...config };
       state.setupIncomplete = isSetupIncomplete(config);
+      state.uiState = setupUiState(config);
       if (state.setupIncomplete) {
         state.activeSection = "settings";
         state.status = {
           tone: "placeholder",
-          message: "Заполните токен и путь к vault в настройках.",
+          message: state.uiState?.message ?? "Заполните токен и путь к vault в настройках.",
         };
         return;
       }
 
+      state.uiState = null;
       if (state.activeSection === "settings") {
         state.activeSection = "home";
       }
@@ -749,9 +905,10 @@ export function createRendererController(deps: ControllerDeps) {
     async activateSection(section: AppSection): Promise<void> {
       if (state.setupIncomplete && section !== "settings") {
         state.activeSection = "settings";
+        state.uiState = setupUiState(state.settings.config);
         state.status = {
           tone: "placeholder",
-          message: "Заполните токен и путь к vault в настройках.",
+          message: state.uiState?.message ?? "Заполните токен и путь к vault в настройках.",
         };
         return;
       }
@@ -799,6 +956,7 @@ export function createRendererController(deps: ControllerDeps) {
     async runHomeSync(): Promise<void> {
       requireConfiguredSetup();
       state.activeSection = "home";
+      state.uiState = null;
       const payload = await deps.runSync();
       state.home.syncSummary = payload.summary;
       state.status = {
@@ -808,6 +966,7 @@ export function createRendererController(deps: ControllerDeps) {
     },
     async loadHomeRecommendations(): Promise<void> {
       state.activeSection = "home";
+      state.uiState = null;
       const payload = await deps.getRecommendations({ archived: false });
       state.home.recommendations = payload.recommendations;
       state.status = {
@@ -820,6 +979,7 @@ export function createRendererController(deps: ControllerDeps) {
     },
     async runHomeDiscovery(): Promise<void> {
       state.activeSection = "home";
+      state.uiState = null;
       const payload = await deps.getDiscoveryRecommendations({ clear: false });
       state.home.discoverySummary = payload.summary;
       state.status = {
@@ -829,6 +989,7 @@ export function createRendererController(deps: ControllerDeps) {
     },
     async clearHomeDiscovery(): Promise<void> {
       state.activeSection = "home";
+      state.uiState = null;
       const payload = await deps.getDiscoveryRecommendations({ clear: true });
       state.home.discoverySummary = payload.summary;
       state.status = {
@@ -844,6 +1005,7 @@ export function createRendererController(deps: ControllerDeps) {
     },
     async runHomeList(): Promise<void> {
       state.activeSection = "home";
+      state.uiState = null;
       const payload = await deps.listTracks({
         kind: state.home.listFilter.kind,
         value: state.home.listFilter.value,
@@ -874,6 +1036,7 @@ export function createRendererController(deps: ControllerDeps) {
     },
     async openRecommendation(path: string): Promise<void> {
       state.activeSection = "recommendations";
+      state.uiState = null;
       const payload = await deps.getRecommendationsVaultView({ selectedPath: path });
       state.selectedRecommendationId = payload.selectedPath ?? path;
       state.recommendationView = payload.selectedNote ? extractRecommendationView(payload.selectedNote) : null;
@@ -881,6 +1044,35 @@ export function createRendererController(deps: ControllerDeps) {
         tone: "success",
         message: "Рекомендация открыта",
       };
+    },
+    beginSettingsValidation(): void {
+      state.activeSection = "settings";
+      state.uiState = makeUiState({
+        kind: "settingsValidationInProgress",
+        title: "Проверяю токен Яндекс Музыки",
+        message: "Проверяю токен Яндекс Музыки и доступ к аккаунту перед сохранением настроек.",
+        nextSteps: ["Это нужно, чтобы не сохранить нерабочий токен в конфиг."],
+        actionLabel: null,
+        actionTarget: null,
+        details: [],
+      });
+      state.status = {
+        tone: "loading",
+        message: "Проверяю токен Яндекс Музыки и доступ к аккаунту перед сохранением настроек.",
+      };
+    },
+    showBackendError(code: string, message: string, details: Record<string, unknown> = {}): void {
+      state.uiState = backendErrorUiState(code, message, details);
+      state.status = {
+        tone: state.uiState.kind === "devEnvironmentError" || state.uiState.kind === "actionError" ? "error" : "placeholder",
+        message: state.uiState.message,
+      };
+      if (state.uiState.actionTarget === "settings") {
+        state.activeSection = "settings";
+      }
+    },
+    clearUiState(): void {
+      state.uiState = state.setupIncomplete ? setupUiState(state.settings.config) : null;
     },
   };
 }

@@ -26,6 +26,14 @@ from music_synchronizer.models import (
     VaultData,
 )
 from music_synchronizer.sync import SyncService
+from music_synchronizer.yandex_client import YandexMusicAuthError, YandexMusicClient, YandexMusicUnavailableError
+
+
+class BackendCommandError(RuntimeError):
+    def __init__(self, code: str, message: str, *, details: dict[str, Any] | None = None) -> None:
+        super().__init__(message)
+        self.code = code
+        self.details = details or {}
 
 
 def _camelize(name: str) -> str:
@@ -208,9 +216,15 @@ class MusicSyncApp:
         log_level: str,
     ) -> dict[str, Any]:
         if not yandex_music_token.strip():
-            raise ValueError("Yandex Music token is required.")
+            raise BackendCommandError(
+                "SETUP_MISSING_TOKEN",
+                "Добавьте токен Яндекс Музыки, чтобы сохранить настройки.",
+            )
         if not obsidian_vault_path.strip():
-            raise ValueError("Obsidian vault path is required.")
+            raise BackendCommandError(
+                "SETUP_MISSING_VAULT",
+                "Выберите папку Obsidian vault, чтобы сохранить настройки.",
+            )
         validated_settings = Settings.model_validate(
             {
                 "YANDEX_MUSIC_TOKEN": yandex_music_token,
@@ -219,7 +233,9 @@ class MusicSyncApp:
                 "LOG_LEVEL": log_level,
             }
         )
-        _write_config_file(_config_target_path(), validated_settings)
+        target_path = _config_target_path()
+        self._validate_yandex_token(yandex_music_token)
+        _write_config_file(target_path, validated_settings)
         self.settings = validated_settings
         self.service = SyncService(self.settings)
         return {"config": _config_payload(self.settings)}
@@ -300,7 +316,17 @@ class MusicSyncApp:
     def run_command(self, command: BackendCommand, **kwargs: Any) -> dict[str, Any]:
         try:
             data = self._dispatch(command, **kwargs)
+        except BackendCommandError as error:
+            return build_error_envelope(command, error.code, str(error), error.details)
         except Exception as error:
+            mapped_error = _map_runtime_error(command, error)
+            if mapped_error is not None:
+                return build_error_envelope(
+                    command,
+                    mapped_error.code,
+                    str(mapped_error),
+                    mapped_error.details,
+                )
             return build_error_envelope(command, _error_code(command), str(error), {})
 
         return build_success_envelope(command, _camelize_structure(data))
@@ -359,6 +385,20 @@ class MusicSyncApp:
             ),
         }
 
+    def _validate_yandex_token(self, token: str) -> None:
+        try:
+            YandexMusicClient(token=token).validate_token()
+        except YandexMusicAuthError as error:
+            raise BackendCommandError(
+                "YANDEX_AUTH_INVALID",
+                "Токен Яндекс Музыки не подошёл. Проверьте токен и попробуйте сохранить настройки снова.",
+            ) from error
+        except YandexMusicUnavailableError as error:
+            raise BackendCommandError(
+                "YANDEX_API_UNAVAILABLE",
+                "Не удалось связаться с Яндекс Музыкой. Проверьте подключение и попробуйте ещё раз позже.",
+            ) from error
+
 
 def _error_code(command: BackendCommand) -> str:
     if command == "show-config":
@@ -378,3 +418,17 @@ def _error_code(command: BackendCommand) -> str:
     if command == "vault":
         return "VAULT_FAILED"
     return "TOP_LISTEN_FAILED"
+
+
+def _map_runtime_error(command: BackendCommand, error: Exception) -> BackendCommandError | None:
+    if isinstance(error, YandexMusicAuthError):
+        return BackendCommandError(
+            "YANDEX_AUTH_INVALID",
+            "Токен Яндекс Музыки не подошёл. Проверьте токен и попробуйте сохранить настройки снова.",
+        )
+    if isinstance(error, YandexMusicUnavailableError):
+        return BackendCommandError(
+            "YANDEX_API_UNAVAILABLE",
+            "Не удалось связаться с Яндекс Музыкой. Проверьте подключение и попробуйте ещё раз позже.",
+        )
+    return None

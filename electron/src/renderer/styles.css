@@ -427,6 +427,43 @@ button {
   padding: 20px 22px 22px;
 }
 
+.state-card {
+  display: grid;
+  gap: 14px;
+  border: 1px solid rgba(255, 210, 31, 0.12);
+  background:
+    radial-gradient(circle at top right, rgba(255, 210, 31, 0.08), transparent 32%),
+    linear-gradient(180deg, rgba(16, 17, 21, 0.98), rgba(8, 9, 11, 0.98));
+}
+
+.state-card h3 {
+  margin: 0;
+  font-size: 28px;
+  line-height: 1.1;
+}
+
+.state-steps,
+.state-details {
+  display: grid;
+  gap: 8px;
+}
+
+.state-step,
+.state-detail {
+  margin: 0;
+  line-height: 1.6;
+}
+
+.state-step {
+  color: var(--text);
+}
+
+.state-detail {
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+  font-size: 13px;
+}
+
 .action-card {
   display: grid;
   gap: 18px;

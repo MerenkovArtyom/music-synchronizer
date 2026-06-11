@@ -15,6 +15,7 @@ from music_synchronizer.models import (
     VaultNote,
     VaultTreeNode,
 )
+from music_synchronizer.yandex_client import YandexMusicAuthError, YandexMusicUnavailableError
 
 
 def _settings(tmp_path: Path) -> Settings:
@@ -88,6 +89,15 @@ def test_save_config_returns_machine_readable_data_and_writes_env_file(
     config_path = tmp_path / "Application Support" / "Music Synchronizer" / "config.env"
     monkeypatch.setenv("MUSIC_SYNC_CONFIG_PATH", str(config_path))
 
+    class FakeClient:
+        def __init__(self, token: str) -> None:
+            self.token = token
+
+        def validate_token(self) -> None:
+            return None
+
+    monkeypatch.setattr("music_synchronizer.app.YandexMusicClient", FakeClient, raising=False)
+
     app = MusicSyncApp(settings=_settings(tmp_path))
 
     result = app.save_config(
@@ -115,6 +125,96 @@ def test_save_config_returns_machine_readable_data_and_writes_env_file(
             "",
         ]
     )
+
+
+def test_save_config_validates_token_before_writing_env_file(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    config_path = tmp_path / "Application Support" / "Music Synchronizer" / "config.env"
+    monkeypatch.setenv("MUSIC_SYNC_CONFIG_PATH", str(config_path))
+    validated_tokens: list[str] = []
+
+    class FakeClient:
+        def __init__(self, token: str) -> None:
+            self.token = token
+
+        def validate_token(self) -> None:
+            validated_tokens.append(self.token)
+
+    monkeypatch.setattr("music_synchronizer.app.YandexMusicClient", FakeClient, raising=False)
+
+    app = MusicSyncApp(settings=_settings(tmp_path))
+    app.save_config(
+        yandex_music_token="fresh-token",
+        obsidian_vault_path=str(tmp_path / "vault"),
+        discovery_playlist_name="Fresh Discovery",
+        log_level="DEBUG",
+    )
+
+    assert validated_tokens == ["fresh-token"]
+    assert config_path.exists()
+
+
+def test_save_config_invalid_token_returns_stable_error_without_writing_env_file(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    config_path = tmp_path / "Application Support" / "Music Synchronizer" / "config.env"
+    monkeypatch.setenv("MUSIC_SYNC_CONFIG_PATH", str(config_path))
+
+    class FakeClient:
+        def __init__(self, token: str) -> None:
+            self.token = token
+
+        def validate_token(self) -> None:
+            raise YandexMusicAuthError("token rejected")
+
+    monkeypatch.setattr("music_synchronizer.app.YandexMusicClient", FakeClient, raising=False)
+
+    app = MusicSyncApp(settings=_settings(tmp_path))
+    payload = app.run_command(
+        "save-config",
+        yandex_music_token="fresh-token",
+        obsidian_vault_path=str(tmp_path / "vault"),
+        discovery_playlist_name="Fresh Discovery",
+        log_level="DEBUG",
+    )
+
+    assert payload == {
+        "ok": False,
+        "command": "save-config",
+        "error": {
+            "code": "YANDEX_AUTH_INVALID",
+            "message": "Токен Яндекс Музыки не подошёл. Проверьте токен и попробуйте сохранить настройки снова.",
+            "details": {},
+        },
+    }
+    assert not config_path.exists()
+
+
+def test_sync_maps_yandex_api_unavailable_to_stable_backend_error(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    app = MusicSyncApp(settings=_settings(tmp_path))
+
+    def raise_api_unavailable() -> dict[str, object]:
+        raise YandexMusicUnavailableError("temporary outage")
+
+    app.sync = raise_api_unavailable  # type: ignore[method-assign]
+
+    result = app.run_command("sync")
+
+    assert result == {
+        "ok": False,
+        "command": "sync",
+        "error": {
+            "code": "YANDEX_API_UNAVAILABLE",
+            "message": "Не удалось связаться с Яндекс Музыкой. Проверьте подключение и попробуйте ещё раз позже.",
+            "details": {},
+        },
+    }
 
 
 def test_save_config_requires_explicit_target_path(tmp_path: Path) -> None:
