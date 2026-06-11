@@ -1,0 +1,129 @@
+{
+  "$defs": {
+    "BackendErrorPayload": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "title": "Code",
+          "type": "string"
+        },
+        "details": {
+          "additionalProperties": true,
+          "default": {},
+          "title": "Details",
+          "type": "object"
+        },
+        "message": {
+          "title": "Message",
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "title": "BackendErrorPayload",
+      "type": "object"
+    },
+    "SyncData": {
+      "additionalProperties": false,
+      "properties": {
+        "summary": {
+          "$ref": "#/$defs/SyncSummaryData"
+        }
+      },
+      "required": [
+        "summary"
+      ],
+      "title": "SyncData",
+      "type": "object"
+    },
+    "SyncErrorEnvelope": {
+      "additionalProperties": false,
+      "properties": {
+        "command": {
+          "const": "sync",
+          "title": "Command",
+          "type": "string"
+        },
+        "error": {
+          "$ref": "#/$defs/BackendErrorPayload"
+        },
+        "ok": {
+          "const": false,
+          "title": "Ok",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "ok",
+        "command",
+        "error"
+      ],
+      "title": "SyncErrorEnvelope",
+      "type": "object"
+    },
+    "SyncSuccessEnvelope": {
+      "additionalProperties": false,
+      "properties": {
+        "command": {
+          "const": "sync",
+          "title": "Command",
+          "type": "string"
+        },
+        "data": {
+          "$ref": "#/$defs/SyncData"
+        },
+        "ok": {
+          "const": true,
+          "title": "Ok",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "ok",
+        "command",
+        "data"
+      ],
+      "title": "SyncSuccessEnvelope",
+      "type": "object"
+    },
+    "SyncSummaryData": {
+      "additionalProperties": false,
+      "properties": {
+        "added": {
+          "title": "Added",
+          "type": "integer"
+        },
+        "archived": {
+          "title": "Archived",
+          "type": "integer"
+        },
+        "removed": {
+          "title": "Removed",
+          "type": "integer"
+        },
+        "unchanged": {
+          "title": "Unchanged",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "added",
+        "unchanged",
+        "archived",
+        "removed"
+      ],
+      "title": "SyncSummaryData",
+      "type": "object"
+    }
+  },
+  "anyOf": [
+    {
+      "$ref": "#/$defs/SyncSuccessEnvelope"
+    },
+    {
+      "$ref": "#/$defs/SyncErrorEnvelope"
+    }
+  ]
+}

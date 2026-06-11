@@ -1,0 +1,234 @@
+{
+  "$defs": {
+    "BackendErrorPayload": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "title": "Code",
+          "type": "string"
+        },
+        "details": {
+          "additionalProperties": true,
+          "default": {},
+          "title": "Details",
+          "type": "object"
+        },
+        "message": {
+          "title": "Message",
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "title": "BackendErrorPayload",
+      "type": "object"
+    },
+    "DiscoveryData": {
+      "additionalProperties": false,
+      "properties": {
+        "recommendations": {
+          "items": {
+            "$ref": "#/$defs/DiscoveryRecommendationEntry"
+          },
+          "title": "Recommendations",
+          "type": "array"
+        },
+        "summary": {
+          "$ref": "#/$defs/DiscoverySummaryData"
+        }
+      },
+      "required": [
+        "summary",
+        "recommendations"
+      ],
+      "title": "DiscoveryData",
+      "type": "object"
+    },
+    "DiscoveryErrorEnvelope": {
+      "additionalProperties": false,
+      "properties": {
+        "command": {
+          "const": "discovery",
+          "title": "Command",
+          "type": "string"
+        },
+        "error": {
+          "$ref": "#/$defs/BackendErrorPayload"
+        },
+        "ok": {
+          "const": false,
+          "title": "Ok",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "ok",
+        "command",
+        "error"
+      ],
+      "title": "DiscoveryErrorEnvelope",
+      "type": "object"
+    },
+    "DiscoveryRecommendationEntry": {
+      "additionalProperties": false,
+      "properties": {
+        "album": {
+          "title": "Album",
+          "type": "string"
+        },
+        "artists": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Artists",
+          "type": "array"
+        },
+        "coverUrl": {
+          "title": "Coverurl",
+          "type": "string"
+        },
+        "discoverySources": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Discoverysources",
+          "type": "array"
+        },
+        "durationSeconds": {
+          "title": "Durationseconds",
+          "type": "integer"
+        },
+        "explain": {
+          "title": "Explain",
+          "type": "string"
+        },
+        "monthlyListens": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Monthlylistens"
+        },
+        "systemTags": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Systemtags",
+          "type": "array"
+        },
+        "title": {
+          "title": "Title",
+          "type": "string"
+        },
+        "trackId": {
+          "title": "Trackid",
+          "type": "string"
+        },
+        "yandexUrl": {
+          "title": "Yandexurl",
+          "type": "string"
+        },
+        "year": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Year"
+        }
+      },
+      "required": [
+        "trackId",
+        "title",
+        "artists",
+        "album",
+        "systemTags",
+        "year",
+        "coverUrl",
+        "durationSeconds",
+        "yandexUrl",
+        "monthlyListens",
+        "discoverySources",
+        "explain"
+      ],
+      "title": "DiscoveryRecommendationEntry",
+      "type": "object"
+    },
+    "DiscoverySuccessEnvelope": {
+      "additionalProperties": false,
+      "properties": {
+        "command": {
+          "const": "discovery",
+          "title": "Command",
+          "type": "string"
+        },
+        "data": {
+          "$ref": "#/$defs/DiscoveryData"
+        },
+        "ok": {
+          "const": true,
+          "title": "Ok",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "ok",
+        "command",
+        "data"
+      ],
+      "title": "DiscoverySuccessEnvelope",
+      "type": "object"
+    },
+    "DiscoverySummaryData": {
+      "additionalProperties": false,
+      "properties": {
+        "added": {
+          "title": "Added",
+          "type": "integer"
+        },
+        "cleared": {
+          "title": "Cleared",
+          "type": "integer"
+        },
+        "removedLiked": {
+          "title": "Removedliked",
+          "type": "integer"
+        },
+        "skipped": {
+          "title": "Skipped",
+          "type": "integer"
+        },
+        "total": {
+          "title": "Total",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "added",
+        "skipped",
+        "removedLiked",
+        "cleared",
+        "total"
+      ],
+      "title": "DiscoverySummaryData",
+      "type": "object"
+    }
+  },
+  "anyOf": [
+    {
+      "$ref": "#/$defs/DiscoverySuccessEnvelope"
+    },
+    {
+      "$ref": "#/$defs/DiscoveryErrorEnvelope"
+    }
+  ]
+}

@@ -1,0 +1,61 @@
+{
+  "$defs": {
+    "BackendErrorPayload": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "title": "Code",
+          "type": "string"
+        },
+        "details": {
+          "additionalProperties": true,
+          "default": {},
+          "title": "Details",
+          "type": "object"
+        },
+        "message": {
+          "title": "Message",
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "title": "BackendErrorPayload",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "command": {
+      "enum": [
+        "show-config",
+        "sync",
+        "dashboard",
+        "list",
+        "top-listen",
+        "recommend",
+        "discovery",
+        "vault"
+      ],
+      "title": "Command",
+      "type": "string"
+    },
+    "error": {
+      "$ref": "#/$defs/BackendErrorPayload"
+    },
+    "ok": {
+      "const": false,
+      "title": "Ok",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "ok",
+    "command",
+    "error"
+  ],
+  "title": "SharedErrorEnvelope",
+  "type": "object"
+}

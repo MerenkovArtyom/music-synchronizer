@@ -1,6 +1,16 @@
 import { spawn } from "node:child_process";
 import path from "node:path";
 
+import Ajv from "ajv";
+
+import dashboardSchema from "../shared/backend-schemas/dashboard.schema.json";
+import discoverySchema from "../shared/backend-schemas/discovery.schema.json";
+import listSchema from "../shared/backend-schemas/list.schema.json";
+import recommendSchema from "../shared/backend-schemas/recommend.schema.json";
+import showConfigSchema from "../shared/backend-schemas/show-config.schema.json";
+import syncSchema from "../shared/backend-schemas/sync.schema.json";
+import topListenSchema from "../shared/backend-schemas/top-listen.schema.json";
+import vaultSchema from "../shared/backend-schemas/vault.schema.json";
 import type {
   BackendCommand,
   BackendEnvelope,
@@ -28,6 +38,48 @@ type BackendData =
   | RecommendationData
   | DiscoveryData
   | VaultData;
+
+function normalizeSchemaForAjv(schema: unknown): unknown {
+  if (Array.isArray(schema)) {
+    return schema.map((item) => normalizeSchemaForAjv(item));
+  }
+
+  if (!schema || typeof schema !== "object") {
+    return schema;
+  }
+
+  const normalizedEntries = Object.entries(schema).map(([key, value]) => {
+    if (key === "$defs") {
+      return ["definitions", normalizeSchemaForAjv(value)];
+    }
+
+    if (key === "$ref" && typeof value === "string") {
+      return [key, value.replace("#/$defs/", "#/definitions/")];
+    }
+
+    return [key, normalizeSchemaForAjv(value)];
+  });
+
+  return Object.fromEntries(normalizedEntries);
+}
+
+const ajv = new Ajv({
+  allErrors: true,
+});
+
+type SchemaValidationError = { instancePath?: string; dataPath?: string; message?: string; keyword: string };
+type BackendSchemaValidator = ReturnType<typeof ajv.compile>;
+
+const backendEnvelopeValidators: Record<BackendCommand, BackendSchemaValidator> = {
+  "show-config": ajv.compile(normalizeSchemaForAjv(showConfigSchema) as object),
+  sync: ajv.compile(normalizeSchemaForAjv(syncSchema) as object),
+  dashboard: ajv.compile(normalizeSchemaForAjv(dashboardSchema) as object),
+  list: ajv.compile(normalizeSchemaForAjv(listSchema) as object),
+  "top-listen": ajv.compile(normalizeSchemaForAjv(topListenSchema) as object),
+  recommend: ajv.compile(normalizeSchemaForAjv(recommendSchema) as object),
+  discovery: ajv.compile(normalizeSchemaForAjv(discoverySchema) as object),
+  vault: ajv.compile(normalizeSchemaForAjv(vaultSchema) as object),
+};
 
 export interface BackendRuntimeEnv extends NodeJS.ProcessEnv {
   MUSIC_SYNC_BACKEND_COMMAND?: string;
@@ -147,6 +199,21 @@ function normalizeBackendError(
       details,
     },
   };
+}
+
+function formatSchemaErrors(
+  errors: SchemaValidationError[] | null | undefined,
+): string {
+  if (!errors || errors.length === 0) {
+    return "Unknown schema validation failure.";
+  }
+
+  return errors
+    .map((error) => {
+      const location = error.instancePath || error.dataPath || "/";
+      return `${location} ${error.message ?? error.keyword}`;
+    })
+    .join("; ");
 }
 
 export function parseBackendCommandEnv(rawValue: string): string[] {
@@ -280,6 +347,24 @@ export function normalizeBackendEnvelope(
         stderr: result.stderr,
         exitCode: result.exitCode,
         request,
+      },
+    );
+  }
+
+  const validator = backendEnvelopeValidators[command];
+  const isValid = validator(payload as object);
+  if (isValid !== true) {
+    return normalizeBackendError(
+      command,
+      "BACKEND_INVALID_OUTPUT",
+      "Backend returned a JSON envelope that failed schema validation.",
+      {
+        stdout: trimmed,
+        stderr: result.stderr,
+        exitCode: result.exitCode,
+        request,
+        schemaErrors: validator.errors ?? [],
+        schemaMessage: formatSchemaErrors(validator.errors),
       },
     );
   }

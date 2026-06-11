@@ -3,6 +3,13 @@ from __future__ import annotations
 from dataclasses import asdict, is_dataclass
 from typing import Any, Literal
 
+from music_synchronizer.backend_contracts import (
+    BackendCommand,
+    ListFilterKind,
+    TopListenMode,
+    build_error_envelope,
+    build_success_envelope,
+)
 from music_synchronizer.config import Settings
 from music_synchronizer.models import (
     DashboardData,
@@ -16,10 +23,6 @@ from music_synchronizer.models import (
     VaultData,
 )
 from music_synchronizer.sync import SyncService
-
-BackendCommand = Literal["show-config", "sync", "dashboard", "list", "top-listen", "recommend", "discovery", "vault"]
-TopListenMode = Literal["most", "least"]
-ListFilterKind = Literal["tag", "artist"]
 
 
 def _camelize(name: str) -> str:
@@ -214,21 +217,9 @@ class MusicSyncApp:
         try:
             data = self._dispatch(command, **kwargs)
         except Exception as error:
-            return {
-                "ok": False,
-                "command": command,
-                "error": {
-                    "code": _error_code(command),
-                    "message": str(error),
-                    "details": {},
-                },
-            }
+            return build_error_envelope(command, _error_code(command), str(error), {})
 
-        return {
-            "ok": True,
-            "command": command,
-            "data": _camelize_structure(data),
-        }
+        return build_success_envelope(command, _camelize_structure(data))
 
     def _dispatch(self, command: BackendCommand, **kwargs: Any) -> dict[str, Any]:
         if command == "show-config":

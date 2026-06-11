@@ -1,0 +1,153 @@
+{
+  "$defs": {
+    "BackendErrorPayload": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "title": "Code",
+          "type": "string"
+        },
+        "details": {
+          "additionalProperties": true,
+          "default": {},
+          "title": "Details",
+          "type": "object"
+        },
+        "message": {
+          "title": "Message",
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "title": "BackendErrorPayload",
+      "type": "object"
+    },
+    "ListData": {
+      "additionalProperties": false,
+      "properties": {
+        "filter": {
+          "$ref": "#/$defs/ListFilterData"
+        },
+        "tracks": {
+          "items": {
+            "$ref": "#/$defs/TrackListEntry"
+          },
+          "title": "Tracks",
+          "type": "array"
+        }
+      },
+      "required": [
+        "filter",
+        "tracks"
+      ],
+      "title": "ListData",
+      "type": "object"
+    },
+    "ListErrorEnvelope": {
+      "additionalProperties": false,
+      "properties": {
+        "command": {
+          "const": "list",
+          "title": "Command",
+          "type": "string"
+        },
+        "error": {
+          "$ref": "#/$defs/BackendErrorPayload"
+        },
+        "ok": {
+          "const": false,
+          "title": "Ok",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "ok",
+        "command",
+        "error"
+      ],
+      "title": "ListErrorEnvelope",
+      "type": "object"
+    },
+    "ListFilterData": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "enum": [
+            "tag",
+            "artist"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "value": {
+          "title": "Value",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "value"
+      ],
+      "title": "ListFilterData",
+      "type": "object"
+    },
+    "ListSuccessEnvelope": {
+      "additionalProperties": false,
+      "properties": {
+        "command": {
+          "const": "list",
+          "title": "Command",
+          "type": "string"
+        },
+        "data": {
+          "$ref": "#/$defs/ListData"
+        },
+        "ok": {
+          "const": true,
+          "title": "Ok",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "ok",
+        "command",
+        "data"
+      ],
+      "title": "ListSuccessEnvelope",
+      "type": "object"
+    },
+    "TrackListEntry": {
+      "additionalProperties": false,
+      "properties": {
+        "artists": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Artists",
+          "type": "array"
+        },
+        "title": {
+          "title": "Title",
+          "type": "string"
+        }
+      },
+      "required": [
+        "title",
+        "artists"
+      ],
+      "title": "TrackListEntry",
+      "type": "object"
+    }
+  },
+  "anyOf": [
+    {
+      "$ref": "#/$defs/ListSuccessEnvelope"
+    },
+    {
+      "$ref": "#/$defs/ListErrorEnvelope"
+    }
+  ]
+}

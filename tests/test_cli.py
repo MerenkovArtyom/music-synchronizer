@@ -183,6 +183,16 @@ def test_sync_uses_project_dotenv_even_when_cwd_differs(
     monkeypatch.chdir(tmp_path)
     monkeypatch.delenv("YANDEX_MUSIC_TOKEN", raising=False)
     monkeypatch.setenv("OBSIDIAN_VAULT_PATH", str(tmp_path))
+    monkeypatch.setattr(
+        "music_synchronizer.cli.MusicSyncApp.sync",
+        lambda self: {  # type: ignore[attr-defined]
+            "summary": {
+                "added": 1,
+                "unchanged": 2,
+                "removed": 3,
+            }
+        },
+    )
 
     result = CliRunner().invoke(app, ["sync"])
 

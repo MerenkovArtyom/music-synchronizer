@@ -222,3 +222,15 @@
 - В markdown-рендерере появилась поддержка Obsidian-style wiki-links вида `[[tracks/...|...]]` и `[[tracks/...]]`, чтобы заметки по артистам и тегам могли ссылаться на песни.
 - Клик по внутренней ссылке на `tracks/*.md` или `tracks/_removed/*.md` теперь переключает интерфейс во вкладку `songs` и открывает нужную заметку трека.
 - Electron tests и typecheck обновлены под новый browse-flow и разбор wiki-links.
+
+## 2026-06-11
+
+### Commit 32: split human CLI and strict JSON backend
+
+- Подтверждено, что `music-sync-app` уже зарегистрирован в корневом `pyproject.toml` как отдельный entrypoint для desktop backend.
+- Человекочитаемый `music-sync` и машинный `music-sync-app` разведены по контракту окончательно: первый остаётся terminal CLI, второй обязан писать в `stdout` ровно один JSON document.
+- В Python добавлен отдельный модуль backend-контрактов с типизированными envelope-моделями для `show-config`, `sync`, `dashboard`, `list`, `top-listen`, `recommend`, `discovery` и `vault`.
+- `backend_cli.py` теперь валидирует каждый payload перед выводом, возвращает стабильный JSON error envelope при schema-ошибке и отлавливает любые случайные записи в `stdout` как protocol violation.
+- Для backend-команд сгенерированы и зафиксированы JSON Schema, которые checked in в `electron/src/shared/backend-schemas/` и стали явным контрактом между Python и Electron.
+- Electron main-process перестал принимать “почти подходящий” JSON: теперь он валидирует ответ backend по command-specific schema, отклоняет missing fields и mismatched `command` и больше не зависит от человекочитаемого CLI-вывода.
+- `README.md`, `electron/README.md`, Python tests, Electron tests и typecheck обновлены под JSON-only backend и новые контрактные гарантии.

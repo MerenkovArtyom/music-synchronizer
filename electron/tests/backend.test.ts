@@ -341,3 +341,55 @@ test("normalizeBackendEnvelope rejects non-json backend output", () => {
   assert.equal(envelope.error.code, "BACKEND_INVALID_OUTPUT");
   assert.match(envelope.error.message, /json/i);
 });
+
+test("normalizeBackendEnvelope rejects a payload with missing required fields", () => {
+  const envelope = normalizeBackendEnvelope("show-config", {
+    stdout: JSON.stringify({
+      ok: true,
+      command: "show-config",
+      data: {
+        config: {
+          obsidianVaultPath: "/tmp/vault",
+          logLevel: "INFO",
+        },
+      },
+    }),
+    stderr: "",
+    exitCode: 0,
+  });
+
+  assert.equal(envelope.ok, false);
+  if (envelope.ok) {
+    throw new Error("expected error envelope");
+  }
+
+  assert.equal(envelope.error.code, "BACKEND_INVALID_OUTPUT");
+  assert.match(envelope.error.message, /schema/i);
+});
+
+test("normalizeBackendEnvelope rejects a payload with mismatched command", () => {
+  const envelope = normalizeBackendEnvelope("sync", {
+    stdout: JSON.stringify({
+      ok: true,
+      command: "dashboard",
+      data: {
+        summary: {
+          added: 1,
+          unchanged: 2,
+          archived: 3,
+          removed: 3,
+        },
+      },
+    }),
+    stderr: "",
+    exitCode: 0,
+  });
+
+  assert.equal(envelope.ok, false);
+  if (envelope.ok) {
+    throw new Error("expected error envelope");
+  }
+
+  assert.equal(envelope.error.code, "BACKEND_INVALID_OUTPUT");
+  assert.match(envelope.error.message, /schema/i);
+});

@@ -1,0 +1,194 @@
+{
+  "$defs": {
+    "BackendErrorPayload": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "title": "Code",
+          "type": "string"
+        },
+        "details": {
+          "additionalProperties": true,
+          "default": {},
+          "title": "Details",
+          "type": "object"
+        },
+        "message": {
+          "title": "Message",
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "title": "BackendErrorPayload",
+      "type": "object"
+    },
+    "RecommendationData": {
+      "additionalProperties": false,
+      "properties": {
+        "includeArchived": {
+          "title": "Includearchived",
+          "type": "boolean"
+        },
+        "recommendations": {
+          "items": {
+            "$ref": "#/$defs/RecommendationEntry"
+          },
+          "title": "Recommendations",
+          "type": "array"
+        }
+      },
+      "required": [
+        "includeArchived",
+        "recommendations"
+      ],
+      "title": "RecommendationData",
+      "type": "object"
+    },
+    "RecommendationEntry": {
+      "additionalProperties": false,
+      "properties": {
+        "archived": {
+          "title": "Archived",
+          "type": "boolean"
+        },
+        "artists": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Artists",
+          "type": "array"
+        },
+        "explain": {
+          "title": "Explain",
+          "type": "string"
+        },
+        "matchedArtists": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Matchedartists",
+          "type": "array"
+        },
+        "matchedGenres": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Matchedgenres",
+          "type": "array"
+        },
+        "matchedUserTags": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Matchedusertags",
+          "type": "array"
+        },
+        "monthlyListens": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Monthlylistens"
+        },
+        "position": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Position"
+        },
+        "score": {
+          "title": "Score",
+          "type": "integer"
+        },
+        "title": {
+          "title": "Title",
+          "type": "string"
+        }
+      },
+      "required": [
+        "title",
+        "artists",
+        "monthlyListens",
+        "position",
+        "archived",
+        "matchedArtists",
+        "matchedGenres",
+        "matchedUserTags",
+        "score",
+        "explain"
+      ],
+      "title": "RecommendationEntry",
+      "type": "object"
+    },
+    "RecommendationErrorEnvelope": {
+      "additionalProperties": false,
+      "properties": {
+        "command": {
+          "const": "recommend",
+          "title": "Command",
+          "type": "string"
+        },
+        "error": {
+          "$ref": "#/$defs/BackendErrorPayload"
+        },
+        "ok": {
+          "const": false,
+          "title": "Ok",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "ok",
+        "command",
+        "error"
+      ],
+      "title": "RecommendationErrorEnvelope",
+      "type": "object"
+    },
+    "RecommendationSuccessEnvelope": {
+      "additionalProperties": false,
+      "properties": {
+        "command": {
+          "const": "recommend",
+          "title": "Command",
+          "type": "string"
+        },
+        "data": {
+          "$ref": "#/$defs/RecommendationData"
+        },
+        "ok": {
+          "const": true,
+          "title": "Ok",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "ok",
+        "command",
+        "data"
+      ],
+      "title": "RecommendationSuccessEnvelope",
+      "type": "object"
+    }
+  },
+  "anyOf": [
+    {
+      "$ref": "#/$defs/RecommendationSuccessEnvelope"
+    },
+    {
+      "$ref": "#/$defs/RecommendationErrorEnvelope"
+    }
+  ]
+}

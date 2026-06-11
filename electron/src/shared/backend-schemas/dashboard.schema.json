@@ -1,0 +1,368 @@
+{
+  "$defs": {
+    "BackendErrorPayload": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "title": "Code",
+          "type": "string"
+        },
+        "details": {
+          "additionalProperties": true,
+          "default": {},
+          "title": "Details",
+          "type": "object"
+        },
+        "message": {
+          "title": "Message",
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "title": "BackendErrorPayload",
+      "type": "object"
+    },
+    "DashboardArtistData": {
+      "additionalProperties": false,
+      "properties": {
+        "monthlyListens": {
+          "title": "Monthlylistens",
+          "type": "integer"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "tracks": {
+          "title": "Tracks",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "name",
+        "monthlyListens",
+        "tracks"
+      ],
+      "title": "DashboardArtistData",
+      "type": "object"
+    },
+    "DashboardData": {
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "title": "Path",
+          "type": "string"
+        },
+        "summary": {
+          "$ref": "#/$defs/DashboardSummaryData"
+        },
+        "topArtists": {
+          "items": {
+            "$ref": "#/$defs/DashboardTopArtistData"
+          },
+          "title": "Topartists",
+          "type": "array"
+        },
+        "topTags": {
+          "items": {
+            "$ref": "#/$defs/DashboardTopTagData"
+          },
+          "title": "Toptags",
+          "type": "array"
+        }
+      },
+      "required": [
+        "path",
+        "summary",
+        "topTags",
+        "topArtists"
+      ],
+      "title": "DashboardData",
+      "type": "object"
+    },
+    "DashboardErrorEnvelope": {
+      "additionalProperties": false,
+      "properties": {
+        "command": {
+          "const": "dashboard",
+          "title": "Command",
+          "type": "string"
+        },
+        "error": {
+          "$ref": "#/$defs/BackendErrorPayload"
+        },
+        "ok": {
+          "const": false,
+          "title": "Ok",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "ok",
+        "command",
+        "error"
+      ],
+      "title": "DashboardErrorEnvelope",
+      "type": "object"
+    },
+    "DashboardLongestTrackData": {
+      "additionalProperties": false,
+      "properties": {
+        "artists": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Artists",
+          "type": "array"
+        },
+        "duration": {
+          "title": "Duration",
+          "type": "string"
+        },
+        "title": {
+          "title": "Title",
+          "type": "string"
+        }
+      },
+      "required": [
+        "title",
+        "artists",
+        "duration"
+      ],
+      "title": "DashboardLongestTrackData",
+      "type": "object"
+    },
+    "DashboardSuccessEnvelope": {
+      "additionalProperties": false,
+      "properties": {
+        "command": {
+          "const": "dashboard",
+          "title": "Command",
+          "type": "string"
+        },
+        "data": {
+          "$ref": "#/$defs/DashboardData"
+        },
+        "ok": {
+          "const": true,
+          "title": "Ok",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "ok",
+        "command",
+        "data"
+      ],
+      "title": "DashboardSuccessEnvelope",
+      "type": "object"
+    },
+    "DashboardSummaryData": {
+      "additionalProperties": false,
+      "properties": {
+        "averageMonthlyListens": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Averagemonthlylistens"
+        },
+        "likedTracks": {
+          "title": "Likedtracks",
+          "type": "integer"
+        },
+        "longestTrack": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DashboardLongestTrackData"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "medianMonthlyListens": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Medianmonthlylistens"
+        },
+        "monthlyListensCoveragePercent": {
+          "title": "Monthlylistenscoveragepercent",
+          "type": "number"
+        },
+        "monthlyListensKnown": {
+          "title": "Monthlylistensknown",
+          "type": "integer"
+        },
+        "mostListenedArtist": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DashboardArtistData"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "mostListenedTrack": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DashboardTrackData"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "mostUsedTag": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DashboardTagData"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "removedTracks": {
+          "title": "Removedtracks",
+          "type": "integer"
+        },
+        "totalDuration": {
+          "title": "Totalduration",
+          "type": "string"
+        },
+        "totalTracks": {
+          "title": "Totaltracks",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "likedTracks",
+        "removedTracks",
+        "totalTracks",
+        "totalDuration",
+        "monthlyListensKnown",
+        "monthlyListensCoveragePercent",
+        "averageMonthlyListens",
+        "medianMonthlyListens",
+        "mostListenedTrack",
+        "mostListenedArtist",
+        "mostUsedTag",
+        "longestTrack"
+      ],
+      "title": "DashboardSummaryData",
+      "type": "object"
+    },
+    "DashboardTagData": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "tracks": {
+          "title": "Tracks",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "name",
+        "tracks"
+      ],
+      "title": "DashboardTagData",
+      "type": "object"
+    },
+    "DashboardTopArtistData": {
+      "additionalProperties": false,
+      "properties": {
+        "monthlyListens": {
+          "title": "Monthlylistens",
+          "type": "integer"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "tracks": {
+          "title": "Tracks",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "name",
+        "monthlyListens",
+        "tracks"
+      ],
+      "title": "DashboardTopArtistData",
+      "type": "object"
+    },
+    "DashboardTopTagData": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "tracks": {
+          "title": "Tracks",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "name",
+        "tracks"
+      ],
+      "title": "DashboardTopTagData",
+      "type": "object"
+    },
+    "DashboardTrackData": {
+      "additionalProperties": false,
+      "properties": {
+        "artists": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Artists",
+          "type": "array"
+        },
+        "monthlyListens": {
+          "title": "Monthlylistens",
+          "type": "integer"
+        },
+        "title": {
+          "title": "Title",
+          "type": "string"
+        }
+      },
+      "required": [
+        "title",
+        "artists",
+        "monthlyListens"
+      ],
+      "title": "DashboardTrackData",
+      "type": "object"
+    }
+  },
+  "anyOf": [
+    {
+      "$ref": "#/$defs/DashboardSuccessEnvelope"
+    },
+    {
+      "$ref": "#/$defs/DashboardErrorEnvelope"
+    }
+  ]
+}

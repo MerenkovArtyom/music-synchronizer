@@ -16,6 +16,8 @@ uv run music-sync
 uv run music-sync-app show-config
 ```
 
+`music-sync` и `music-sync-app` зарегистрированы в [`pyproject.toml`](/Users/artem/Programming/music_synchronizer/pyproject.toml).
+
 ## Возможности
 
 - Синхронизация лайкнутых треков Яндекс Музыки в `tracks/*.md`.
@@ -116,7 +118,13 @@ uv run music-sync-app show-config
 - `uv run music-sync discovery --clear` — очищает папку `recommendations/` и discovery-плейлист Яндекс Музыки.
 - `uv run music-sync list --tag "rock"` — ищет активные сохранённые треки по тегу.
 - `uv run music-sync list --artist "Artist Name"` — ищет активные сохранённые треки по артисту.
-- `uv run music-sync-app ...` — machine-readable backend entrypoint для desktop app; печатает JSON envelope вместо человекочитаемого текста.
+- `uv run music-sync-app ...` — machine-readable backend entrypoint для desktop app; пишет ровно один JSON document в `stdout` и не использует человекочитаемый вывод.
+
+Режимы CLI:
+
+- `music-sync` — человекочитаемый CLI для запуска из терминала.
+- `music-sync-app` — JSON-only backend для Electron.
+- JSON Schema для `music-sync-app` зафиксированы в [electron/src/shared/backend-schemas/](/Users/artem/Programming/music_synchronizer/electron/src/shared/backend-schemas).
 
 Особенности команды `list`:
 
@@ -290,6 +298,7 @@ uv run pytest tests/test_yandex_client.py -v
 
 - это оболочка над общим Python app-backend;
 - текущий backend для Electron по умолчанию запускает `uv run music-sync-app`;
+- `music-sync-app` зарегистрирован в корневом `pyproject.toml` и предназначен только для машинного JSON-обмена;
 - в desktop UI есть read-only раздел `Vault` для просмотра дерева `my_music` и preview заметок;
 - Electron-часть пока не заменяет и не дублирует основную логику синхронизации.
 

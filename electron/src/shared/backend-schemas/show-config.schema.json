@@ -1,0 +1,124 @@
+{
+  "$defs": {
+    "BackendErrorPayload": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "title": "Code",
+          "type": "string"
+        },
+        "details": {
+          "additionalProperties": true,
+          "default": {},
+          "title": "Details",
+          "type": "object"
+        },
+        "message": {
+          "title": "Message",
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "title": "BackendErrorPayload",
+      "type": "object"
+    },
+    "ConfigSummaryData": {
+      "additionalProperties": false,
+      "properties": {
+        "logLevel": {
+          "title": "Loglevel",
+          "type": "string"
+        },
+        "obsidianVaultPath": {
+          "title": "Obsidianvaultpath",
+          "type": "string"
+        },
+        "yandexMusicTokenPresent": {
+          "title": "Yandexmusictokenpresent",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "yandexMusicTokenPresent",
+        "obsidianVaultPath",
+        "logLevel"
+      ],
+      "title": "ConfigSummaryData",
+      "type": "object"
+    },
+    "ShowConfigData": {
+      "additionalProperties": false,
+      "properties": {
+        "config": {
+          "$ref": "#/$defs/ConfigSummaryData"
+        }
+      },
+      "required": [
+        "config"
+      ],
+      "title": "ShowConfigData",
+      "type": "object"
+    },
+    "ShowConfigErrorEnvelope": {
+      "additionalProperties": false,
+      "properties": {
+        "command": {
+          "const": "show-config",
+          "title": "Command",
+          "type": "string"
+        },
+        "error": {
+          "$ref": "#/$defs/BackendErrorPayload"
+        },
+        "ok": {
+          "const": false,
+          "title": "Ok",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "ok",
+        "command",
+        "error"
+      ],
+      "title": "ShowConfigErrorEnvelope",
+      "type": "object"
+    },
+    "ShowConfigSuccessEnvelope": {
+      "additionalProperties": false,
+      "properties": {
+        "command": {
+          "const": "show-config",
+          "title": "Command",
+          "type": "string"
+        },
+        "data": {
+          "$ref": "#/$defs/ShowConfigData"
+        },
+        "ok": {
+          "const": true,
+          "title": "Ok",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "ok",
+        "command",
+        "data"
+      ],
+      "title": "ShowConfigSuccessEnvelope",
+      "type": "object"
+    }
+  },
+  "anyOf": [
+    {
+      "$ref": "#/$defs/ShowConfigSuccessEnvelope"
+    },
+    {
+      "$ref": "#/$defs/ShowConfigErrorEnvelope"
+    }
+  ]
+}

@@ -167,3 +167,100 @@ def test_backend_cli_vault_passes_selected_path(
     payload = json.loads(capsys.readouterr().out)
     assert payload["command"] == "vault"
     assert payload["data"]["selectedPath"] == "tracks/Liked.md"
+
+
+def test_backend_cli_writes_exactly_one_json_document_to_stdout(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setenv("YANDEX_MUSIC_TOKEN", "token")
+    monkeypatch.setenv("OBSIDIAN_VAULT_PATH", str(tmp_path))
+
+    exit_code = main(["show-config"])
+
+    assert exit_code == 0
+    captured = capsys.readouterr()
+    assert captured.err == ""
+    payload = json.loads(captured.out)
+    assert captured.out == json.dumps(payload, sort_keys=True) + "\n"
+
+
+def test_backend_cli_rejects_accidental_stdout_before_envelope(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setenv("YANDEX_MUSIC_TOKEN", "token")
+    monkeypatch.setenv("OBSIDIAN_VAULT_PATH", str(tmp_path))
+
+    class FakeApp:
+        def run_command(self, command: str, **kwargs: object) -> dict[str, object]:
+            print("debug noise")
+            return {
+                "ok": True,
+                "command": command,
+                "data": {
+                    "config": {
+                        "yandexMusicTokenPresent": True,
+                        "obsidianVaultPath": str(tmp_path),
+                        "logLevel": "INFO",
+                    }
+                },
+            }
+
+    monkeypatch.setattr("music_synchronizer.backend_cli.MusicSyncApp", FakeApp)
+
+    exit_code = main(["show-config"])
+
+    assert exit_code == 1
+    captured = capsys.readouterr()
+    assert captured.err == ""
+    payload = json.loads(captured.out)
+    assert payload == {
+        "ok": False,
+        "command": "show-config",
+        "error": {
+            "code": "BACKEND_STDOUT_VIOLATION",
+            "message": "music-sync-app must not write non-JSON output to stdout.",
+            "details": {
+                "capturedStdout": "debug noise\n",
+            },
+        },
+    }
+    assert captured.out == json.dumps(payload, sort_keys=True) + "\n"
+
+
+def test_backend_cli_returns_json_error_when_payload_breaks_schema(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setenv("YANDEX_MUSIC_TOKEN", "token")
+    monkeypatch.setenv("OBSIDIAN_VAULT_PATH", str(tmp_path))
+
+    class FakeApp:
+        def run_command(self, command: str, **kwargs: object) -> dict[str, object]:
+            return {
+                "ok": True,
+                "command": command,
+                "data": {
+                    "config": {
+                        "obsidianVaultPath": str(tmp_path),
+                        "logLevel": "INFO",
+                    }
+                },
+            }
+
+    monkeypatch.setattr("music_synchronizer.backend_cli.MusicSyncApp", FakeApp)
+
+    exit_code = main(["show-config"])
+
+    assert exit_code == 1
+    captured = capsys.readouterr()
+    assert captured.err == ""
+    payload = json.loads(captured.out)
+    assert payload["ok"] is False
+    assert payload["command"] == "show-config"
+    assert payload["error"]["code"] == "BACKEND_SCHEMA_VALIDATION_FAILED"
+    assert "yandexMusicTokenPresent" in payload["error"]["message"]

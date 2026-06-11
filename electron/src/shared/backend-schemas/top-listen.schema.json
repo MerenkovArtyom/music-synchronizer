@@ -1,0 +1,144 @@
+{
+  "$defs": {
+    "BackendErrorPayload": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "title": "Code",
+          "type": "string"
+        },
+        "details": {
+          "additionalProperties": true,
+          "default": {},
+          "title": "Details",
+          "type": "object"
+        },
+        "message": {
+          "title": "Message",
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "title": "BackendErrorPayload",
+      "type": "object"
+    },
+    "TopListenData": {
+      "additionalProperties": false,
+      "properties": {
+        "leastPlayed": {
+          "items": {
+            "$ref": "#/$defs/TopListenEntry"
+          },
+          "title": "Leastplayed",
+          "type": "array"
+        },
+        "mostPlayed": {
+          "items": {
+            "$ref": "#/$defs/TopListenEntry"
+          },
+          "title": "Mostplayed",
+          "type": "array"
+        }
+      },
+      "required": [
+        "mostPlayed",
+        "leastPlayed"
+      ],
+      "title": "TopListenData",
+      "type": "object"
+    },
+    "TopListenEntry": {
+      "additionalProperties": false,
+      "properties": {
+        "artists": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Artists",
+          "type": "array"
+        },
+        "monthlyListens": {
+          "title": "Monthlylistens",
+          "type": "integer"
+        },
+        "position": {
+          "title": "Position",
+          "type": "integer"
+        },
+        "title": {
+          "title": "Title",
+          "type": "string"
+        }
+      },
+      "required": [
+        "title",
+        "artists",
+        "monthlyListens",
+        "position"
+      ],
+      "title": "TopListenEntry",
+      "type": "object"
+    },
+    "TopListenErrorEnvelope": {
+      "additionalProperties": false,
+      "properties": {
+        "command": {
+          "const": "top-listen",
+          "title": "Command",
+          "type": "string"
+        },
+        "error": {
+          "$ref": "#/$defs/BackendErrorPayload"
+        },
+        "ok": {
+          "const": false,
+          "title": "Ok",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "ok",
+        "command",
+        "error"
+      ],
+      "title": "TopListenErrorEnvelope",
+      "type": "object"
+    },
+    "TopListenSuccessEnvelope": {
+      "additionalProperties": false,
+      "properties": {
+        "command": {
+          "const": "top-listen",
+          "title": "Command",
+          "type": "string"
+        },
+        "data": {
+          "$ref": "#/$defs/TopListenData"
+        },
+        "ok": {
+          "const": true,
+          "title": "Ok",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "ok",
+        "command",
+        "data"
+      ],
+      "title": "TopListenSuccessEnvelope",
+      "type": "object"
+    }
+  },
+  "anyOf": [
+    {
+      "$ref": "#/$defs/TopListenSuccessEnvelope"
+    },
+    {
+      "$ref": "#/$defs/TopListenErrorEnvelope"
+    }
+  ]
+}

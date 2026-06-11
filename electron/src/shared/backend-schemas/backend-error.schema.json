@@ -1,0 +1,25 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "code": {
+      "title": "Code",
+      "type": "string"
+    },
+    "details": {
+      "additionalProperties": true,
+      "default": {},
+      "title": "Details",
+      "type": "object"
+    },
+    "message": {
+      "title": "Message",
+      "type": "string"
+    }
+  },
+  "required": [
+    "code",
+    "message"
+  ],
+  "title": "BackendErrorPayload",
+  "type": "object"
+}

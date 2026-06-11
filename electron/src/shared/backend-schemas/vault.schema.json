@@ -1,0 +1,204 @@
+{
+  "$defs": {
+    "BackendErrorPayload": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "title": "Code",
+          "type": "string"
+        },
+        "details": {
+          "additionalProperties": true,
+          "default": {},
+          "title": "Details",
+          "type": "object"
+        },
+        "message": {
+          "title": "Message",
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "title": "BackendErrorPayload",
+      "type": "object"
+    },
+    "VaultData": {
+      "additionalProperties": false,
+      "properties": {
+        "selectedNote": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/VaultNoteData"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "selectedPath": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Selectedpath"
+        },
+        "tree": {
+          "items": {
+            "$ref": "#/$defs/VaultTreeNodeData"
+          },
+          "title": "Tree",
+          "type": "array"
+        },
+        "vaultPath": {
+          "title": "Vaultpath",
+          "type": "string"
+        }
+      },
+      "required": [
+        "vaultPath",
+        "tree",
+        "selectedPath",
+        "selectedNote"
+      ],
+      "title": "VaultData",
+      "type": "object"
+    },
+    "VaultErrorEnvelope": {
+      "additionalProperties": false,
+      "properties": {
+        "command": {
+          "const": "vault",
+          "title": "Command",
+          "type": "string"
+        },
+        "error": {
+          "$ref": "#/$defs/BackendErrorPayload"
+        },
+        "ok": {
+          "const": false,
+          "title": "Ok",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "ok",
+        "command",
+        "error"
+      ],
+      "title": "VaultErrorEnvelope",
+      "type": "object"
+    },
+    "VaultNoteData": {
+      "additionalProperties": false,
+      "properties": {
+        "content": {
+          "title": "Content",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "path": {
+          "title": "Path",
+          "type": "string"
+        },
+        "title": {
+          "title": "Title",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "path",
+        "title",
+        "content"
+      ],
+      "title": "VaultNoteData",
+      "type": "object"
+    },
+    "VaultSuccessEnvelope": {
+      "additionalProperties": false,
+      "properties": {
+        "command": {
+          "const": "vault",
+          "title": "Command",
+          "type": "string"
+        },
+        "data": {
+          "$ref": "#/$defs/VaultData"
+        },
+        "ok": {
+          "const": true,
+          "title": "Ok",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "ok",
+        "command",
+        "data"
+      ],
+      "title": "VaultSuccessEnvelope",
+      "type": "object"
+    },
+    "VaultTreeNodeData": {
+      "additionalProperties": false,
+      "properties": {
+        "children": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/VaultTreeNodeData"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Children"
+        },
+        "kind": {
+          "enum": [
+            "directory",
+            "file"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "path": {
+          "title": "Path",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "path",
+        "kind",
+        "children"
+      ],
+      "title": "VaultTreeNodeData",
+      "type": "object"
+    }
+  },
+  "anyOf": [
+    {
+      "$ref": "#/$defs/VaultSuccessEnvelope"
+    },
+    {
+      "$ref": "#/$defs/VaultErrorEnvelope"
+    }
+  ]
+}

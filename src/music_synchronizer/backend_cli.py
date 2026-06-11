@@ -1,9 +1,19 @@
 from __future__ import annotations
 
 import argparse
+import io
 import json
+import sys
+from contextlib import redirect_stdout
 from typing import Sequence
 
+from pydantic import ValidationError
+
+from music_synchronizer.backend_contracts import (
+    BackendCommand,
+    build_error_envelope,
+    validate_backend_envelope,
+)
 from music_synchronizer.app import MusicSyncApp
 
 
@@ -55,11 +65,51 @@ def _payload_for_args(app: MusicSyncApp, args: argparse.Namespace) -> dict[str, 
     return app.run_command("top-listen", mode="most" if args.most else "least")
 
 
+def _serialize_payload(payload: dict[str, object]) -> str:
+    return json.dumps(payload, ensure_ascii=False, sort_keys=True)
+
+
+def _execute_command(args: argparse.Namespace) -> tuple[BackendCommand, dict[str, object]]:
+    command = args.command
+    assert isinstance(command, str)
+
+    captured_stdout = io.StringIO()
+    try:
+        with redirect_stdout(captured_stdout):
+            payload = _payload_for_args(MusicSyncApp(), args)
+    except Exception as error:
+        return command, build_error_envelope(
+            command,
+            "BACKEND_UNHANDLED_ERROR",
+            f"music-sync-app failed before producing a response: {error}",
+            {},
+        )
+
+    leaked_stdout = captured_stdout.getvalue()
+    if leaked_stdout:
+        return command, build_error_envelope(
+            command,
+            "BACKEND_STDOUT_VIOLATION",
+            "music-sync-app must not write non-JSON output to stdout.",
+            {"capturedStdout": leaked_stdout},
+        )
+
+    try:
+        return command, validate_backend_envelope(command, payload)
+    except ValidationError as error:
+        return command, build_error_envelope(
+            command,
+            "BACKEND_SCHEMA_VALIDATION_FAILED",
+            f"Backend payload failed schema validation: {error}",
+            {"errors": error.errors(include_url=False)},
+        )
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = _build_parser()
     args = parser.parse_args(list(argv) if argv is not None else None)
-    payload = _payload_for_args(MusicSyncApp(), args)
-    print(json.dumps(payload))
+    _command, payload = _execute_command(args)
+    sys.stdout.write(_serialize_payload(payload) + "\n")
     return 0 if payload["ok"] else 1
 
 

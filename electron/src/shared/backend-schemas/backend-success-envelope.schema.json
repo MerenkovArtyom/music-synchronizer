@@ -1,0 +1,36 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "command": {
+      "enum": [
+        "show-config",
+        "sync",
+        "dashboard",
+        "list",
+        "top-listen",
+        "recommend",
+        "discovery",
+        "vault"
+      ],
+      "title": "Command",
+      "type": "string"
+    },
+    "data": {
+      "additionalProperties": true,
+      "title": "Data",
+      "type": "object"
+    },
+    "ok": {
+      "const": true,
+      "title": "Ok",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "ok",
+    "command",
+    "data"
+  ],
+  "title": "SharedSuccessEnvelope",
+  "type": "object"
+}
