@@ -1,4 +1,14 @@
-import type { BackendEnvelope, DiscoveryData, ListData, RecommendationData, SyncData, VaultData } from "../shared/contracts.js";
+import type {
+  BackendEnvelope,
+  ConfigData,
+  ConfigValues,
+  DiscoveryData,
+  ListData,
+  RecommendationData,
+  SaveConfigRequest,
+  SyncData,
+  VaultData,
+} from "../shared/contracts.js";
 import {
   createRendererController,
   type AppSection,
@@ -26,6 +36,16 @@ const viewerPlaceholder = document.querySelector<HTMLElement>("#viewer-placehold
 const placeholderTitle = document.querySelector<HTMLElement>("#placeholder-title");
 const placeholderBody = document.querySelector<HTMLElement>("#placeholder-body");
 const metaPlaceholder = document.querySelector<HTMLElement>("#meta-placeholder");
+
+const settingsView = document.querySelector<HTMLElement>("#settings-view");
+const settingsForm = document.querySelector<HTMLFormElement>("#settings-form");
+const settingsToken = document.querySelector<HTMLInputElement>("#settings-token");
+const settingsVaultPath = document.querySelector<HTMLInputElement>("#settings-vault-path");
+const settingsDiscoveryPlaylist = document.querySelector<HTMLInputElement>("#settings-discovery-playlist");
+const settingsLogLevel = document.querySelector<HTMLSelectElement>("#settings-log-level");
+const settingsChooseVaultButton = document.querySelector<HTMLButtonElement>("#settings-choose-vault");
+const settingsSaveButton = document.querySelector<HTMLButtonElement>("#settings-save-button");
+const settingsHint = document.querySelector<HTMLElement>("#settings-hint");
 
 const homeView = document.querySelector<HTMLElement>("#home-view");
 const homeSyncButton = document.querySelector<HTMLButtonElement>("#home-sync-button");
@@ -80,6 +100,14 @@ const vaultNoteTitle = document.querySelector<HTMLElement>("#vault-note-title");
 const vaultNoteTab = document.querySelector<HTMLElement>("#vault-note-tab");
 const vaultNoteBody = document.querySelector<HTMLElement>("#vault-note-body");
 
+let settingsDraft: SaveConfigRequest = {
+  yandexMusicToken: "",
+  obsidianVaultPath: "",
+  discoveryPlaylistName: "Рекомендации",
+  logLevel: "INFO",
+};
+let settingsDirty = false;
+
 function errorSummary<T>(result: BackendEnvelope<T>): string {
   if (result.ok) {
     return "Unexpected success result.";
@@ -106,6 +134,22 @@ function setStatus(tone: "idle" | "loading" | "success" | "placeholder" | "error
 
 async function expectVaultData(): Promise<VaultData> {
   const result = await window.musicSync.getVaultView({});
+  if (!result.ok) {
+    throw new Error(errorSummary(result));
+  }
+  return result.data;
+}
+
+async function expectConfigData(): Promise<ConfigData> {
+  const result = await window.musicSync.showConfig();
+  if (!result.ok) {
+    throw new Error(errorSummary(result));
+  }
+  return result.data;
+}
+
+async function saveConfig(request: SaveConfigRequest): Promise<ConfigData> {
+  const result = await window.musicSync.saveConfig(request);
   if (!result.ok) {
     throw new Error(errorSummary(result));
   }
@@ -745,6 +789,46 @@ function renderHomeView(state: RendererState): void {
     "Discovery summary пока не загружен.",
   );
   renderHomeListResult(state);
+  const actionsDisabled = state.setupIncomplete;
+  homeSyncButton?.toggleAttribute("disabled", actionsDisabled);
+  homeRecommendButton?.toggleAttribute("disabled", actionsDisabled);
+  homeDiscoveryButton?.toggleAttribute("disabled", actionsDisabled);
+  homeDiscoveryClearButton?.toggleAttribute("disabled", actionsDisabled);
+}
+
+function syncDraftFromConfig(config: ConfigValues): void {
+  settingsDraft = {
+    yandexMusicToken: config.yandexMusicToken,
+    obsidianVaultPath: config.obsidianVaultPath,
+    discoveryPlaylistName: config.discoveryPlaylistName,
+    logLevel: config.logLevel,
+  };
+  settingsDirty = false;
+}
+
+function renderSettingsView(state: RendererState): void {
+  if (settingsToken) {
+    settingsToken.value = settingsDraft.yandexMusicToken;
+  }
+  if (settingsVaultPath) {
+    settingsVaultPath.value = settingsDraft.obsidianVaultPath;
+  }
+  if (settingsDiscoveryPlaylist) {
+    settingsDiscoveryPlaylist.value = settingsDraft.discoveryPlaylistName;
+  }
+  if (settingsLogLevel) {
+    settingsLogLevel.value = settingsDraft.logLevel;
+  }
+  if (settingsHint) {
+    settingsHint.textContent = state.setupIncomplete
+      ? "Токен и vault path обязательны для первого запуска."
+      : settingsDirty
+        ? "Есть несохранённые изменения."
+        : "Настройки сохранены в пользовательский config path.";
+  }
+  if (settingsSaveButton) {
+    settingsSaveButton.disabled = !settingsDirty;
+  }
 }
 
 function renderNavigation(activeSection: AppSection): void {
@@ -765,6 +849,7 @@ function renderPlaceholder(state: RendererState): void {
 }
 
 function renderLayoutVisibility(state: RendererState): void {
+  const settingsActive = state.activeSection === "settings";
   const homeActive = state.activeSection === "home";
   const dashboardActive = state.activeSection === "dashboard" && state.dashboardView !== null;
   const songActive = state.activeSection === "songs" && state.trackView !== null;
@@ -772,9 +857,12 @@ function renderLayoutVisibility(state: RendererState): void {
     state.activeSection === "recommendations" && state.recommendationView !== null;
   const artistActive = state.activeSection === "artists" && state.artistView !== null;
   const tagActive = state.activeSection === "tags" && state.tagView !== null;
-  const placeholderActive = !homeActive && !dashboardActive && !songActive && !recommendationActive && !artistActive && !tagActive;
+  const placeholderActive = !settingsActive && !homeActive && !dashboardActive && !songActive && !recommendationActive && !artistActive && !tagActive;
   const metaPlaceholderActive = placeholderActive || artistActive || tagActive;
 
+  if (settingsView) {
+    settingsView.hidden = !settingsActive;
+  }
   if (homeView) {
     homeView.hidden = !homeActive;
   }
@@ -856,6 +944,13 @@ function renderSidebarCopy(state: RendererState): void {
     return;
   }
 
+  if (state.activeSection === "settings") {
+    listKicker.textContent = "Setup";
+    listHeading.textContent = "config.env";
+    listSubtitle.textContent = "Пользовательский config path для desktop-приложения.";
+    return;
+  }
+
   if (state.activeSection === "home") {
     listKicker.textContent = "Главная";
     listHeading.textContent = "actions/";
@@ -883,6 +978,14 @@ function render(): void {
       listEmpty.hidden = true;
     }
     renderHomeView(state);
+  } else if (state.activeSection === "settings") {
+    renderSettingsView(state);
+    if (listContent) {
+      listContent.innerHTML = "";
+    }
+    if (listEmpty) {
+      listEmpty.hidden = true;
+    }
   } else if (state.activeSection === "songs") {
     renderSongsList(state);
     renderSongView(state.trackView);
@@ -933,6 +1036,8 @@ function render(): void {
     state.status.tone,
     state.activeSection === "home"
       ? "Главная"
+      : state.activeSection === "settings"
+        ? "Setup"
       : state.activeSection === "songs"
       ? "Песни"
       : state.activeSection === "dashboard"
@@ -950,7 +1055,9 @@ function render(): void {
 
 async function activateSection(section: AppSection): Promise<void> {
   const loadingMessage =
-    section === "home"
+    section === "settings"
+      ? "Открываю настройки..."
+      : section === "home"
       ? "Открываю главную..."
       : section === "songs"
       ? "Загружаю локальные заметки..."
@@ -968,6 +1075,27 @@ async function activateSection(section: AppSection): Promise<void> {
     render();
   } catch (error) {
     setStatus("error", "Ошибка", error instanceof Error ? error.message : "Не удалось обновить экран");
+  } finally {
+    setBusy(false);
+  }
+}
+
+function updateSettingsDraft(patch: Partial<SaveConfigRequest>): void {
+  settingsDraft = { ...settingsDraft, ...patch };
+  settingsDirty = true;
+  renderSettingsView(controller.getState());
+}
+
+async function saveSettings(): Promise<void> {
+  setBusy(true);
+  setStatus("loading", "Сохранение", "Сохраняю настройки...");
+  try {
+    const payload = await saveConfig(settingsDraft);
+    controller.setConfig(payload.config);
+    syncDraftFromConfig(payload.config);
+    render();
+  } catch (error) {
+    setStatus("error", "Ошибка", error instanceof Error ? error.message : "Не удалось сохранить настройки");
   } finally {
     setBusy(false);
   }
@@ -1134,6 +1262,40 @@ homeListValue?.addEventListener("input", () => {
   controller.setHomeListFilterValue(homeListValue.value);
 });
 
+settingsForm?.addEventListener("submit", (event) => {
+  event.preventDefault();
+  void saveSettings();
+});
+
+settingsToken?.addEventListener("input", () => {
+  updateSettingsDraft({ yandexMusicToken: settingsToken.value });
+});
+
+settingsVaultPath?.addEventListener("input", () => {
+  updateSettingsDraft({ obsidianVaultPath: settingsVaultPath.value });
+});
+
+settingsDiscoveryPlaylist?.addEventListener("input", () => {
+  updateSettingsDraft({ discoveryPlaylistName: settingsDiscoveryPlaylist.value });
+});
+
+settingsLogLevel?.addEventListener("change", () => {
+  updateSettingsDraft({ logLevel: settingsLogLevel.value });
+});
+
+settingsChooseVaultButton?.addEventListener("click", () => {
+  void (async () => {
+    const selectedPath = await window.musicSync.chooseVaultPath();
+    if (!selectedPath) {
+      return;
+    }
+    updateSettingsDraft({ obsidianVaultPath: selectedPath });
+    if (settingsVaultPath) {
+      settingsVaultPath.value = selectedPath;
+    }
+  })();
+});
+
 vaultNoteBody?.addEventListener("click", (event) => {
   const target = event.target;
   if (!(target instanceof Element)) {
@@ -1166,4 +1328,15 @@ recommendationNote?.addEventListener("click", (event) => {
   void selectSong(trackPath);
 });
 
-void activateSection("home");
+void (async () => {
+  try {
+    const config = await expectConfigData();
+    controller.setConfig(config.config);
+    syncDraftFromConfig(config.config);
+    render();
+    const initialSection: AppSection = controller.getState().setupIncomplete ? "settings" : "home";
+    await activateSection(initialSection);
+  } catch (error) {
+    setStatus("error", "Ошибка", error instanceof Error ? error.message : "Не удалось загрузить настройки");
+  }
+})();

@@ -108,15 +108,22 @@ button {
   grid-template-columns: 260px minmax(0, 1fr);
 }
 
+.app-shell[data-layout="settings"] {
+  grid-template-columns: 260px minmax(0, 1fr);
+}
+
 .app-shell[data-layout="dashboard"] .list-sidebar,
 .app-shell[data-layout="dashboard"] .meta-sidebar,
 .app-shell[data-layout="home"] .list-sidebar,
-.app-shell[data-layout="home"] .meta-sidebar {
+.app-shell[data-layout="home"] .meta-sidebar,
+.app-shell[data-layout="settings"] .list-sidebar,
+.app-shell[data-layout="settings"] .meta-sidebar {
   display: none;
 }
 
 .app-shell[data-layout="dashboard"] .viewer-panel,
-.app-shell[data-layout="home"] .viewer-panel {
+.app-shell[data-layout="home"] .viewer-panel,
+.app-shell[data-layout="settings"] .viewer-panel {
   padding: 18px 28px 40px;
   border-right: 0;
 }
@@ -126,6 +133,10 @@ button {
 }
 
 .app-shell[data-layout="home"] .viewer-panel {
+  overflow: auto;
+}
+
+.app-shell[data-layout="settings"] .viewer-panel {
   overflow: auto;
 }
 
@@ -207,6 +218,10 @@ button {
   gap: 8px;
   margin-top: 10px;
 }
+
+.nav-item-settings {
+  margin-top: auto;
+ }
 
 .nav-item {
   display: flex;
@@ -387,6 +402,13 @@ button {
   align-content: start;
 }
 
+.settings-view {
+  display: grid;
+  gap: 18px;
+  min-height: auto;
+  align-content: start;
+}
+
 .home-hero {
   display: grid;
   gap: 8px;
@@ -515,6 +537,30 @@ button {
 
 .field-grow {
   flex: 1 1 260px;
+}
+
+.field-span {
+  grid-column: 1 / -1;
+}
+
+.settings-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px 18px;
+}
+
+.settings-path-row {
+  display: flex;
+  gap: 12px;
+  align-items: end;
+}
+
+.settings-actions {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
 }
 
 .field-block input,

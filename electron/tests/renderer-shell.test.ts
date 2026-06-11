@@ -303,6 +303,22 @@ test("createRendererController loads vault data when songs tab becomes active", 
   assert.equal(controller.getState().songItems[0]?.label, "Blinding Lights.md");
 });
 
+test("createRendererController exposes settings as the first-run section when setup is incomplete", () => {
+  const controller = createRendererController(makeControllerDeps());
+
+  controller.setConfig({
+    yandexMusicToken: "",
+    yandexMusicTokenPresent: false,
+    obsidianVaultPath: "",
+    discoveryPlaylistName: "Рекомендации",
+    logLevel: "INFO",
+  });
+
+  assert.equal(controller.getState().activeSection, "settings");
+  assert.equal(controller.getState().setupIncomplete, true);
+  assert.equal(controller.getState().status.message, "Заполните токен и путь к vault в настройках.");
+});
+
 test("createRendererController filters songs tab down to tracks paths only", async () => {
   const controller = createRendererController(makeControllerDeps({
     getVaultView: async () =>
@@ -568,6 +584,14 @@ test("createRendererController runs home actions and stores their results", asyn
     },
   }));
 
+  controller.setConfig({
+    yandexMusicToken: "token",
+    yandexMusicTokenPresent: true,
+    obsidianVaultPath: "/tmp/vault",
+    discoveryPlaylistName: "Рекомендации",
+    logLevel: "INFO",
+  });
+
   await controller.activateSection("home");
   await controller.runHomeSync();
   await controller.loadHomeRecommendations();
@@ -590,6 +614,23 @@ test("createRendererController runs home actions and stores their results", asyn
   assert.equal(controller.getState().home.listResult?.filter.kind, "tag");
   assert.equal(controller.getState().home.listFilter.kind, "artist");
   assert.equal(controller.getState().home.listFilter.value, "M83");
+});
+
+test("createRendererController blocks sync actions until setup is complete", async () => {
+  const controller = createRendererController(makeControllerDeps({
+    runSync: async () => makeSyncData(),
+  }));
+
+  controller.setConfig({
+    yandexMusicToken: "",
+    yandexMusicTokenPresent: false,
+    obsidianVaultPath: "",
+    discoveryPlaylistName: "Рекомендации",
+    logLevel: "INFO",
+  });
+
+  await assert.rejects(() => controller.runHomeSync(), /settings/i);
+  assert.equal(controller.getState().status.tone, "placeholder");
 });
 
 test("createRendererController loads dashboard note and summary when dashboard tab becomes active", async () => {
@@ -641,9 +682,10 @@ test("formatDuration returns a compact minute-second label", () => {
   assert.equal(formatDuration(0), "0:00");
 });
 
-test("sectionLayoutMode hides secondary chrome only for dashboard", () => {
+test("sectionLayoutMode hides secondary chrome for dashboard, home, and settings", () => {
   assert.equal(sectionLayoutMode("dashboard"), "dashboard");
   assert.equal(sectionLayoutMode("home"), "home");
+  assert.equal(sectionLayoutMode("settings"), "settings");
   assert.equal(sectionLayoutMode("songs"), "default");
   assert.equal(sectionLayoutMode("recommendations"), "default");
 });

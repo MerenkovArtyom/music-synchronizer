@@ -48,6 +48,11 @@
           </button>
         </nav>
 
+        <button class="nav-item nav-item-settings" type="button" data-section="settings">
+          <span class="nav-icon" aria-hidden="true">⚙</span>
+          <span>Настройки</span>
+        </button>
+
         <div class="status-card" aria-live="polite">
           <span id="status-badge" class="status-badge status-idle">Ожидание</span>
           <p id="status-message">Готово к загрузке библиотеки</p>
@@ -65,6 +70,53 @@
       </section>
 
       <main class="viewer-panel">
+        <section id="settings-view" class="viewer-card settings-view" hidden>
+          <div class="home-hero">
+            <p class="panel-kicker">Desktop setup</p>
+            <h2>Настройки</h2>
+            <p class="panel-copy">
+              Сохраните токен и путь к vault в пользовательский config, чтобы синхронизировать музыку без терминала.
+            </p>
+          </div>
+
+          <section class="result-card action-card">
+            <form id="settings-form" class="settings-form">
+              <label class="field-block field-span" for="settings-token">
+                <span>Yandex Music token</span>
+                <input id="settings-token" name="yandexMusicToken" type="password" autocomplete="off" />
+              </label>
+
+              <div class="settings-path-row field-span">
+                <label class="field-block field-grow" for="settings-vault-path">
+                  <span>Obsidian vault path</span>
+                  <input id="settings-vault-path" name="obsidianVaultPath" type="text" autocomplete="off" />
+                </label>
+                <button id="settings-choose-vault" class="action-button action-button-secondary" type="button">Выбрать папку</button>
+              </div>
+
+              <label class="field-block" for="settings-discovery-playlist">
+                <span>Discovery playlist name</span>
+                <input id="settings-discovery-playlist" name="discoveryPlaylistName" type="text" autocomplete="off" />
+              </label>
+
+              <label class="field-block" for="settings-log-level">
+                <span>Log level</span>
+                <select id="settings-log-level" name="logLevel">
+                  <option value="DEBUG">DEBUG</option>
+                  <option value="INFO">INFO</option>
+                  <option value="WARNING">WARNING</option>
+                  <option value="ERROR">ERROR</option>
+                </select>
+              </label>
+
+              <div class="settings-actions field-span">
+                <p id="settings-hint" class="panel-copy">Токен и vault path обязательны для первого запуска.</p>
+                <button id="settings-save-button" class="action-button" type="submit">Сохранить настройки</button>
+              </div>
+            </form>
+          </section>
+        </section>
+
         <section id="home-view" class="viewer-card home-view" hidden>
           <div class="home-hero">
             <p class="panel-kicker">Быстрые действия</p>

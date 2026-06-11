@@ -72,11 +72,65 @@ def test_show_config_returns_machine_readable_data(tmp_path: Path) -> None:
 
     assert result == {
         "config": {
+            "yandexMusicToken": "token",
             "yandexMusicTokenPresent": True,
             "obsidianVaultPath": str(tmp_path),
+            "discoveryPlaylistName": "Рекомендации",
             "logLevel": "INFO",
         }
     }
+
+
+def test_save_config_returns_machine_readable_data_and_writes_env_file(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    config_path = tmp_path / "Application Support" / "Music Synchronizer" / "config.env"
+    monkeypatch.setenv("MUSIC_SYNC_CONFIG_PATH", str(config_path))
+
+    app = MusicSyncApp(settings=_settings(tmp_path))
+
+    result = app.save_config(
+        yandex_music_token="fresh-token",
+        obsidian_vault_path=str(tmp_path / "vault"),
+        discovery_playlist_name="Fresh Discovery",
+        log_level="DEBUG",
+    )
+
+    assert result == {
+        "config": {
+            "yandexMusicToken": "fresh-token",
+            "yandexMusicTokenPresent": True,
+            "obsidianVaultPath": str(tmp_path / "vault"),
+            "discoveryPlaylistName": "Fresh Discovery",
+            "logLevel": "DEBUG",
+        }
+    }
+    assert config_path.read_text(encoding="utf-8") == "\n".join(
+        [
+            "YANDEX_MUSIC_TOKEN=fresh-token",
+            f"OBSIDIAN_VAULT_PATH={tmp_path / 'vault'}",
+            'YANDEX_MUSIC_DISCOVERY_PLAYLIST_NAME="Fresh Discovery"',
+            "LOG_LEVEL=DEBUG",
+            "",
+        ]
+    )
+
+
+def test_save_config_requires_explicit_target_path(tmp_path: Path) -> None:
+    app = MusicSyncApp(settings=_settings(tmp_path))
+
+    payload = app.run_command(
+        "save-config",
+        yandex_music_token="fresh-token",
+        obsidian_vault_path=str(tmp_path / "vault"),
+        discovery_playlist_name="Fresh Discovery",
+        log_level="DEBUG",
+    )
+
+    assert payload["ok"] is False
+    assert payload["command"] == "save-config"
+    assert payload["error"]["message"] == "MUSIC_SYNC_CONFIG_PATH is not configured."
 
 
 def test_dashboard_returns_machine_readable_data(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:

@@ -1,20 +1,24 @@
 import path from "node:path";
 
-import { app, BrowserWindow, ipcMain } from "electron";
+import { app, BrowserWindow, dialog, ipcMain } from "electron";
 
 import type {
   DiscoveryRequest,
   ListTracksRequest,
   RecommendationRequest,
+  SaveConfigRequest,
   TopListenRequest,
   VaultRequest,
 } from "../shared/contracts.js";
 import { runBackendCommand } from "./backend.js";
 
-const runtimeEnv = {
-  ...process.env,
-  MUSIC_SYNC_REPO_ROOT: process.env.MUSIC_SYNC_REPO_ROOT ?? path.resolve(__dirname, "../../.."),
-};
+function runtimeEnv() {
+  return {
+    ...process.env,
+    MUSIC_SYNC_REPO_ROOT: process.env.MUSIC_SYNC_REPO_ROOT ?? path.resolve(__dirname, "../../.."),
+    MUSIC_SYNC_CONFIG_PATH: path.join(app.getPath("userData"), "config.env"),
+  };
+}
 
 function createWindow(): BrowserWindow {
   const window = new BrowserWindow({
@@ -37,59 +41,77 @@ function createWindow(): BrowserWindow {
 
 function registerIpcHandlers(): void {
   ipcMain.handle("music-sync:show-config", async () => {
-    return await runBackendCommand("show-config", undefined, runtimeEnv, {
+    return await runBackendCommand("show-config", undefined, runtimeEnv(), {
+      isPackaged: app.isPackaged,
+      appPath: app.getAppPath(),
+    });
+  });
+
+  ipcMain.handle("music-sync:save-config", async (_event, request: SaveConfigRequest) => {
+    return await runBackendCommand("save-config", request, runtimeEnv(), {
       isPackaged: app.isPackaged,
       appPath: app.getAppPath(),
     });
   });
 
   ipcMain.handle("music-sync:sync", async () => {
-    return await runBackendCommand("sync", undefined, runtimeEnv, {
+    return await runBackendCommand("sync", undefined, runtimeEnv(), {
       isPackaged: app.isPackaged,
       appPath: app.getAppPath(),
     });
   });
 
   ipcMain.handle("music-sync:list", async (_event, request: ListTracksRequest) => {
-    return await runBackendCommand("list", request, runtimeEnv, {
+    return await runBackendCommand("list", request, runtimeEnv(), {
       isPackaged: app.isPackaged,
       appPath: app.getAppPath(),
     });
   });
 
   ipcMain.handle("music-sync:top-listen", async (_event, request: TopListenRequest) => {
-    return await runBackendCommand("top-listen", request, runtimeEnv, {
+    return await runBackendCommand("top-listen", request, runtimeEnv(), {
       isPackaged: app.isPackaged,
       appPath: app.getAppPath(),
     });
   });
 
   ipcMain.handle("music-sync:dashboard", async () => {
-    return await runBackendCommand("dashboard", undefined, runtimeEnv, {
+    return await runBackendCommand("dashboard", undefined, runtimeEnv(), {
       isPackaged: app.isPackaged,
       appPath: app.getAppPath(),
     });
   });
 
   ipcMain.handle("music-sync:recommend", async (_event, request: RecommendationRequest) => {
-    return await runBackendCommand("recommend", request, runtimeEnv, {
+    return await runBackendCommand("recommend", request, runtimeEnv(), {
       isPackaged: app.isPackaged,
       appPath: app.getAppPath(),
     });
   });
 
   ipcMain.handle("music-sync:discovery", async (_event, request: DiscoveryRequest) => {
-    return await runBackendCommand("discovery", request, runtimeEnv, {
+    return await runBackendCommand("discovery", request, runtimeEnv(), {
       isPackaged: app.isPackaged,
       appPath: app.getAppPath(),
     });
   });
 
   ipcMain.handle("music-sync:vault", async (_event, request: VaultRequest) => {
-    return await runBackendCommand("vault", request, runtimeEnv, {
+    return await runBackendCommand("vault", request, runtimeEnv(), {
       isPackaged: app.isPackaged,
       appPath: app.getAppPath(),
     });
+  });
+
+  ipcMain.handle("music-sync:choose-vault-path", async () => {
+    const window = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0];
+    const result = await dialog.showOpenDialog(window, {
+      properties: ["openDirectory", "createDirectory"],
+    });
+    if (result.canceled) {
+      return null;
+    }
+    return result.filePaths[0] ?? null;
   });
 }
 

@@ -1,13 +1,28 @@
-export type BackendCommand = "show-config" | "sync" | "list" | "top-listen" | "dashboard" | "recommend" | "discovery" | "vault";
+export type BackendCommand = "show-config" | "save-config" | "sync" | "list" | "top-listen" | "dashboard" | "recommend" | "discovery" | "vault";
 export type FilterKind = "tag" | "artist";
 export type TopListenMode = "most" | "least";
 
+export interface ConfigValues {
+  yandexMusicToken: string;
+  yandexMusicTokenPresent: boolean;
+  obsidianVaultPath: string;
+  discoveryPlaylistName: string;
+  logLevel: string;
+}
+
 export interface ShowConfigData {
-  config: {
-    yandexMusicTokenPresent: boolean;
-    obsidianVaultPath: string;
-    logLevel: string;
-  };
+  config: ConfigValues;
+}
+
+export interface SaveConfigRequest {
+  yandexMusicToken: string;
+  obsidianVaultPath: string;
+  discoveryPlaylistName: string;
+  logLevel: string;
+}
+
+export interface SaveConfigData {
+  config: ConfigValues;
 }
 
 export interface SyncData {
@@ -191,6 +206,8 @@ export type BackendEnvelope<T> = BackendSuccessEnvelope<T> | BackendErrorEnvelop
 
 export interface RendererApi {
   showConfig: () => Promise<BackendEnvelope<ConfigData>>;
+  saveConfig: (request: SaveConfigRequest) => Promise<BackendEnvelope<SaveConfigData>>;
+  chooseVaultPath: () => Promise<string | null>;
   runSync: () => Promise<BackendEnvelope<SyncData>>;
   listTracks: (request: ListTracksRequest) => Promise<BackendEnvelope<ListData>>;
   getTopListen: (request: TopListenRequest) => Promise<BackendEnvelope<MonthlyTopData>>;

@@ -9,6 +9,7 @@ import type {
   DiscoveryRequest,
   RecommendationData,
   RecommendationRequest,
+  SaveConfigData,
   TopListenRequest,
   VaultRequest,
 } from "../src/shared/contracts.js";
@@ -80,8 +81,10 @@ test("normalizeBackendEnvelope accepts a machine-readable success envelope", () 
       command: "show-config",
       data: {
         config: {
+          yandexMusicToken: "token",
           yandexMusicTokenPresent: true,
           obsidianVaultPath: "/tmp/vault",
+          discoveryPlaylistName: "Рекомендации",
           logLevel: "INFO",
         },
       },
@@ -97,6 +100,70 @@ test("normalizeBackendEnvelope accepts a machine-readable success envelope", () 
 
   assert.equal(envelope.data.config.obsidianVaultPath, "/tmp/vault");
   assert.equal(envelope.data.config.yandexMusicTokenPresent, true);
+  assert.equal(envelope.data.config.yandexMusicToken, "token");
+});
+
+test("buildBackendInvocation appends save-config flags", () => {
+  const invocation = buildBackendInvocation(
+    "save-config",
+    [
+      "--yandex-music-token",
+      "fresh-token",
+      "--obsidian-vault-path",
+      "/tmp/vault",
+      "--discovery-playlist-name",
+      "Fresh Discovery",
+      "--log-level",
+      "DEBUG",
+    ],
+    {
+      MUSIC_SYNC_BACKEND_COMMAND: '["python", "-m", "music_synchronizer.backend_cli"]',
+      MUSIC_SYNC_REPO_ROOT: "/tmp/music-sync",
+    },
+  );
+
+  assert.equal(invocation.command, "python");
+  assert.deepEqual(invocation.args, [
+    "-m",
+    "music_synchronizer.backend_cli",
+    "save-config",
+    "--yandex-music-token",
+    "fresh-token",
+    "--obsidian-vault-path",
+    "/tmp/vault",
+    "--discovery-playlist-name",
+    "Fresh Discovery",
+    "--log-level",
+    "DEBUG",
+  ]);
+});
+
+test("normalizeBackendEnvelope accepts a machine-readable save-config envelope", () => {
+  const envelope = normalizeBackendEnvelope("save-config", {
+    stdout: JSON.stringify({
+      ok: true,
+      command: "save-config",
+      data: {
+        config: {
+          yandexMusicToken: "fresh-token",
+          yandexMusicTokenPresent: true,
+          obsidianVaultPath: "/tmp/vault",
+          discoveryPlaylistName: "Fresh Discovery",
+          logLevel: "DEBUG",
+        },
+      },
+    }),
+    stderr: "",
+    exitCode: 0,
+  }) as BackendEnvelope<SaveConfigData>;
+
+  assert.equal(envelope.ok, true);
+  if (!envelope.ok) {
+    throw new Error("expected success envelope");
+  }
+
+  assert.equal(envelope.data.config.yandexMusicToken, "fresh-token");
+  assert.equal(envelope.data.config.discoveryPlaylistName, "Fresh Discovery");
 });
 
 test("normalizeBackendEnvelope accepts a machine-readable top-listen envelope", () => {

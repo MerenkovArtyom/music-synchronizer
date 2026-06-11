@@ -59,7 +59,7 @@
       "title": "ConfigSummaryData",
       "type": "object"
     },
-    "ShowConfigData": {
+    "SaveConfigData": {
       "additionalProperties": false,
       "properties": {
         "config": {
@@ -69,14 +69,14 @@
       "required": [
         "config"
       ],
-      "title": "ShowConfigData",
+      "title": "SaveConfigData",
       "type": "object"
     },
-    "ShowConfigErrorEnvelope": {
+    "SaveConfigErrorEnvelope": {
       "additionalProperties": false,
       "properties": {
         "command": {
-          "const": "show-config",
+          "const": "save-config",
           "title": "Command",
           "type": "string"
         },
@@ -94,19 +94,19 @@
         "command",
         "error"
       ],
-      "title": "ShowConfigErrorEnvelope",
+      "title": "SaveConfigErrorEnvelope",
       "type": "object"
     },
-    "ShowConfigSuccessEnvelope": {
+    "SaveConfigSuccessEnvelope": {
       "additionalProperties": false,
       "properties": {
         "command": {
-          "const": "show-config",
+          "const": "save-config",
           "title": "Command",
           "type": "string"
         },
         "data": {
-          "$ref": "#/$defs/ShowConfigData"
+          "$ref": "#/$defs/SaveConfigData"
         },
         "ok": {
           "const": true,
@@ -119,16 +119,16 @@
         "command",
         "data"
       ],
-      "title": "ShowConfigSuccessEnvelope",
+      "title": "SaveConfigSuccessEnvelope",
       "type": "object"
     }
   },
   "anyOf": [
     {
-      "$ref": "#/$defs/ShowConfigSuccessEnvelope"
+      "$ref": "#/$defs/SaveConfigSuccessEnvelope"
     },
     {
-      "$ref": "#/$defs/ShowConfigErrorEnvelope"
+      "$ref": "#/$defs/SaveConfigErrorEnvelope"
     }
   ]
 }

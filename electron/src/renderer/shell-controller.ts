@@ -1,4 +1,5 @@
 import type {
+  ConfigValues,
   DashboardData,
   DiscoveryData,
   DiscoveryRequest,
@@ -13,6 +14,7 @@ import type {
 } from "../shared/contracts.js";
 
 export type AppSection =
+  | "settings"
   | "home"
   | "dashboard"
   | "songs"
@@ -20,7 +22,7 @@ export type AppSection =
   | "artists"
   | "recommendations";
 
-export type SectionLayoutMode = "default" | "dashboard" | "home";
+export type SectionLayoutMode = "default" | "dashboard" | "home" | "settings";
 
 export interface RendererStatus {
   tone: "idle" | "loading" | "success" | "placeholder";
@@ -106,9 +108,15 @@ export interface HomeState {
   listResult: ListData | null;
 }
 
+export interface SettingsState {
+  config: ConfigValues;
+}
+
 export interface RendererState {
   activeSection: AppSection;
   status: RendererStatus;
+  settings: SettingsState;
+  setupIncomplete: boolean;
   home: HomeState;
   songItems: SongListItem[];
   selectedSongPath: string | null;
@@ -143,7 +151,14 @@ export function sectionLayoutMode(section: AppSection): SectionLayoutMode {
   if (section === "home") {
     return "home";
   }
+  if (section === "settings") {
+    return "settings";
+  }
   return section === "dashboard" ? "dashboard" : "default";
+}
+
+function isSetupIncomplete(config: ConfigValues): boolean {
+  return config.yandexMusicToken.trim() === "" || config.obsidianVaultPath.trim() === "";
 }
 
 export function formatDuration(durationSeconds: number): string {
@@ -516,6 +531,7 @@ export function parseWikiLink(rawLink: string): { target: string; label: string 
 
 function placeholderCopy(section: AppSection): { title: string; body: string } {
   const titles: Record<Exclude<AppSection, "songs" | "recommendations">, string> = {
+    settings: "Настройки",
     home: "Главная",
     dashboard: "Dashboard",
     tags: "Теги",
@@ -535,6 +551,16 @@ export function createRendererController(deps: ControllerDeps) {
       tone: "idle",
       message: "Готово к загрузке библиотеки",
     },
+    settings: {
+      config: {
+        yandexMusicToken: "",
+        yandexMusicTokenPresent: false,
+        obsidianVaultPath: "",
+        discoveryPlaylistName: "Рекомендации",
+        logLevel: "INFO",
+      },
+    },
+    setupIncomplete: false,
     home: {
       syncSummary: null,
       recommendations: [],
@@ -683,12 +709,60 @@ export function createRendererController(deps: ControllerDeps) {
     };
   }
 
+  function requireConfiguredSetup(): void {
+    if (!state.setupIncomplete) {
+      return;
+    }
+
+    state.activeSection = "settings";
+    state.status = {
+      tone: "placeholder",
+      message: "Заполните токен и путь к vault в настройках.",
+    };
+    throw new Error("Open settings and save the required config first.");
+  }
+
   return {
     getState(): RendererState {
       return state;
     },
+    setConfig(config: ConfigValues): void {
+      state.settings.config = { ...config };
+      state.setupIncomplete = isSetupIncomplete(config);
+      if (state.setupIncomplete) {
+        state.activeSection = "settings";
+        state.status = {
+          tone: "placeholder",
+          message: "Заполните токен и путь к vault в настройках.",
+        };
+        return;
+      }
+
+      if (state.activeSection === "settings") {
+        state.activeSection = "home";
+      }
+      state.status = {
+        tone: "idle",
+        message: "Настройки сохранены. Можно запускать синхронизацию.",
+      };
+    },
     async activateSection(section: AppSection): Promise<void> {
+      if (state.setupIncomplete && section !== "settings") {
+        state.activeSection = "settings";
+        state.status = {
+          tone: "placeholder",
+          message: "Заполните токен и путь к vault в настройках.",
+        };
+        return;
+      }
       state.activeSection = section;
+      if (section === "settings") {
+        state.status = {
+          tone: "idle",
+          message: "Заполните настройки для работы desktop-приложения.",
+        };
+        return;
+      }
       if (section === "home") {
         activateHome();
         return;
@@ -723,6 +797,7 @@ export function createRendererController(deps: ControllerDeps) {
       };
     },
     async runHomeSync(): Promise<void> {
+      requireConfiguredSetup();
       state.activeSection = "home";
       const payload = await deps.runSync();
       state.home.syncSummary = payload.summary;

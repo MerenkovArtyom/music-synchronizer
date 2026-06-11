@@ -9,6 +9,8 @@ import type {
   MonthlyTopData,
   RecommendationData,
   RecommendationRequest,
+  SaveConfigData,
+  SaveConfigRequest,
   SyncData,
   TopListenRequest,
   VaultData,
@@ -17,6 +19,8 @@ import type {
 
 export interface MusicSyncBridge {
   showConfig: () => Promise<BackendEnvelope<ConfigData>>;
+  saveConfig: (request: SaveConfigRequest) => Promise<BackendEnvelope<SaveConfigData>>;
+  chooseVaultPath: () => Promise<string | null>;
   runSync: () => Promise<BackendEnvelope<SyncData>>;
   listTracks: (request: ListTracksRequest) => Promise<BackendEnvelope<ListData>>;
   getTopListen: (request: TopListenRequest) => Promise<BackendEnvelope<MonthlyTopData>>;

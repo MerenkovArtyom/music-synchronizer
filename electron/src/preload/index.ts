@@ -5,6 +5,7 @@ import type {
   DiscoveryRequest,
   ListTracksRequest,
   RecommendationRequest,
+  SaveConfigRequest,
   TopListenRequest,
   VaultRequest,
 } from "../shared/contracts.js";
@@ -12,6 +13,12 @@ import type {
 const api: MusicSyncBridge = {
   showConfig: async () => {
     return await ipcRenderer.invoke("music-sync:show-config");
+  },
+  saveConfig: async (request: SaveConfigRequest) => {
+    return await ipcRenderer.invoke("music-sync:save-config", request);
+  },
+  chooseVaultPath: async () => {
+    return await ipcRenderer.invoke("music-sync:choose-vault-path");
   },
   runSync: async () => {
     return await ipcRenderer.invoke("music-sync:sync");

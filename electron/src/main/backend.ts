@@ -7,6 +7,7 @@ import dashboardSchema from "../shared/backend-schemas/dashboard.schema.json";
 import discoverySchema from "../shared/backend-schemas/discovery.schema.json";
 import listSchema from "../shared/backend-schemas/list.schema.json";
 import recommendSchema from "../shared/backend-schemas/recommend.schema.json";
+import saveConfigSchema from "../shared/backend-schemas/save-config.schema.json";
 import showConfigSchema from "../shared/backend-schemas/show-config.schema.json";
 import syncSchema from "../shared/backend-schemas/sync.schema.json";
 import topListenSchema from "../shared/backend-schemas/top-listen.schema.json";
@@ -23,6 +24,8 @@ import type {
   MonthlyTopData,
   RecommendationData,
   RecommendationRequest,
+  SaveConfigData,
+  SaveConfigRequest,
   SyncData,
   TopListenRequest,
   VaultData,
@@ -31,6 +34,7 @@ import type {
 
 type BackendData =
   | ConfigData
+  | SaveConfigData
   | SyncData
   | ListData
   | MonthlyTopData
@@ -72,6 +76,7 @@ type BackendSchemaValidator = ReturnType<typeof ajv.compile>;
 
 const backendEnvelopeValidators: Record<BackendCommand, BackendSchemaValidator> = {
   "show-config": ajv.compile(normalizeSchemaForAjv(showConfigSchema) as object),
+  "save-config": ajv.compile(normalizeSchemaForAjv(saveConfigSchema) as object),
   sync: ajv.compile(normalizeSchemaForAjv(syncSchema) as object),
   dashboard: ajv.compile(normalizeSchemaForAjv(dashboardSchema) as object),
   list: ajv.compile(normalizeSchemaForAjv(listSchema) as object),
@@ -137,8 +142,31 @@ function resolveCommandTokens(tokens: string[], cwd: string | undefined): string
 
 function buildRequestArgs(
   command: BackendCommand,
-  request?: ListTracksRequest | TopListenRequest | RecommendationRequest | DiscoveryRequest | VaultRequest,
+  request?:
+    | ListTracksRequest
+    | TopListenRequest
+    | RecommendationRequest
+    | DiscoveryRequest
+    | VaultRequest
+    | SaveConfigRequest,
 ): string[] {
+  if (command === "save-config") {
+    const saveConfigRequest = request as SaveConfigRequest | undefined;
+    if (!saveConfigRequest) {
+      return [];
+    }
+    return [
+      "--yandex-music-token",
+      saveConfigRequest.yandexMusicToken,
+      "--obsidian-vault-path",
+      saveConfigRequest.obsidianVaultPath,
+      "--discovery-playlist-name",
+      saveConfigRequest.discoveryPlaylistName,
+      "--log-level",
+      saveConfigRequest.logLevel,
+    ];
+  }
+
   if (command === "list") {
     const listRequest = request as ListTracksRequest | undefined;
     if (!listRequest) {
@@ -295,7 +323,7 @@ export function buildBackendInvocation(
 export function normalizeBackendEnvelope(
   command: BackendCommand,
   result: BackendProcessResult,
-  request?: ListTracksRequest | TopListenRequest | RecommendationRequest | DiscoveryRequest | VaultRequest,
+  request?: ListTracksRequest | TopListenRequest | RecommendationRequest | DiscoveryRequest | VaultRequest | SaveConfigRequest,
 ): BackendEnvelope<BackendData> {
   const trimmed = result.stdout.trim();
   if (trimmed === "") {
@@ -413,7 +441,14 @@ function runProcess(invocation: BackendInvocation, env: BackendRuntimeEnv): Prom
 
 export async function runBackendCommand(
   command: BackendCommand,
-  request: ListTracksRequest | TopListenRequest | RecommendationRequest | DiscoveryRequest | VaultRequest | undefined,
+  request:
+    | ListTracksRequest
+    | TopListenRequest
+    | RecommendationRequest
+    | DiscoveryRequest
+    | VaultRequest
+    | SaveConfigRequest
+    | undefined,
   env: BackendRuntimeEnv,
   context: BackendRuntimeContext,
 ): Promise<BackendEnvelope<BackendData>> {

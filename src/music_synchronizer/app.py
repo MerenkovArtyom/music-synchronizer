@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 from dataclasses import asdict, is_dataclass
+import os
+from pathlib import Path
+import tempfile
 from typing import Any, Literal
 
 from music_synchronizer.backend_contracts import (
@@ -10,7 +13,7 @@ from music_synchronizer.backend_contracts import (
     build_error_envelope,
     build_success_envelope,
 )
-from music_synchronizer.config import Settings
+from music_synchronizer.config import Settings, raw_config_values
 from music_synchronizer.models import (
     DashboardData,
     DashboardStatEntry,
@@ -126,19 +129,100 @@ def _discovery_track_payload(entry: DiscoveryTrackInfo) -> dict[str, Any]:
     }
 
 
+def _config_payload(settings: Settings) -> dict[str, Any]:
+    return {
+        "yandexMusicToken": settings.yandex_music_token,
+        "yandexMusicTokenPresent": bool(settings.yandex_music_token),
+        "obsidianVaultPath": str(settings.obsidian_vault_path),
+        "discoveryPlaylistName": settings.discovery_playlist_name,
+        "logLevel": settings.log_level,
+    }
+
+
+def _serialize_env_value(value: str) -> str:
+    if value == "" or any(character in value for character in (' ', "\n", "\r", "\t", "#", '"', "'")):
+        escaped = value.replace("\\", "\\\\").replace('"', '\\"')
+        return f'"{escaped}"'
+    return value
+
+
+def _config_target_path() -> Path:
+    explicit_path = os.getenv("MUSIC_SYNC_CONFIG_PATH")
+    if not explicit_path:
+        raise ValueError("MUSIC_SYNC_CONFIG_PATH is not configured.")
+    return Path(explicit_path).expanduser()
+
+
+def _write_config_file(target_path: Path, settings: Settings) -> None:
+    target_path.parent.mkdir(parents=True, exist_ok=True)
+    content = "\n".join(
+        [
+            f"YANDEX_MUSIC_TOKEN={_serialize_env_value(settings.yandex_music_token)}",
+            f"OBSIDIAN_VAULT_PATH={_serialize_env_value(str(settings.obsidian_vault_path))}",
+            "YANDEX_MUSIC_DISCOVERY_PLAYLIST_NAME="
+            f"{_serialize_env_value(settings.discovery_playlist_name)}",
+            f"LOG_LEVEL={_serialize_env_value(settings.log_level)}",
+            "",
+        ]
+    )
+    with tempfile.NamedTemporaryFile(
+        "w",
+        encoding="utf-8",
+        dir=target_path.parent,
+        delete=False,
+    ) as temporary_file:
+        temporary_file.write(content)
+        temp_path = Path(temporary_file.name)
+    temp_path.replace(target_path)
+
+
 class MusicSyncApp:
     def __init__(self, settings: Settings | None = None) -> None:
         self.settings = settings or Settings()
         self.service = SyncService(self.settings)
 
     def show_config(self) -> dict[str, Any]:
+        if not os.getenv("MUSIC_SYNC_CONFIG_PATH"):
+            return {"config": _config_payload(self.settings)}
+
+        raw_values = raw_config_values()
         return {
             "config": {
-                "yandexMusicTokenPresent": bool(self.settings.yandex_music_token),
-                "obsidianVaultPath": str(self.settings.obsidian_vault_path),
-                "logLevel": self.settings.log_level,
+                "yandexMusicToken": raw_values.get("YANDEX_MUSIC_TOKEN", ""),
+                "yandexMusicTokenPresent": bool(raw_values.get("YANDEX_MUSIC_TOKEN", "").strip()),
+                "obsidianVaultPath": raw_values.get("OBSIDIAN_VAULT_PATH", ""),
+                "discoveryPlaylistName": raw_values.get(
+                    "YANDEX_MUSIC_DISCOVERY_PLAYLIST_NAME",
+                    self.settings.discovery_playlist_name,
+                ),
+                "logLevel": raw_values.get("LOG_LEVEL", self.settings.log_level),
             }
         }
+
+    def save_config(
+        self,
+        *,
+        yandex_music_token: str,
+        obsidian_vault_path: str,
+        discovery_playlist_name: str,
+        log_level: str,
+    ) -> dict[str, Any]:
+        if not yandex_music_token.strip():
+            raise ValueError("Yandex Music token is required.")
+        if not obsidian_vault_path.strip():
+            raise ValueError("Obsidian vault path is required.")
+        validated_settings = Settings.model_validate(
+            {
+                "YANDEX_MUSIC_TOKEN": yandex_music_token,
+                "OBSIDIAN_VAULT_PATH": obsidian_vault_path,
+                "YANDEX_MUSIC_DISCOVERY_PLAYLIST_NAME": discovery_playlist_name,
+                "LOG_LEVEL": log_level,
+            }
+        )
+        _write_config_file(_config_target_path(), validated_settings)
+        self.settings = validated_settings
+        self.service = SyncService(self.settings)
+        return {"config": _config_payload(self.settings)}
 
     def sync(self) -> dict[str, Any]:
         summary = self.service.run()
@@ -224,6 +308,13 @@ class MusicSyncApp:
     def _dispatch(self, command: BackendCommand, **kwargs: Any) -> dict[str, Any]:
         if command == "show-config":
             return self.show_config()
+        if command == "save-config":
+            return self.save_config(
+                yandex_music_token=kwargs["yandex_music_token"],
+                obsidian_vault_path=kwargs["obsidian_vault_path"],
+                discovery_playlist_name=kwargs["discovery_playlist_name"],
+                log_level=kwargs["log_level"],
+            )
         if command == "sync":
             return self.sync()
         if command == "dashboard":
@@ -272,6 +363,8 @@ class MusicSyncApp:
 def _error_code(command: BackendCommand) -> str:
     if command == "show-config":
         return "SHOW_CONFIG_FAILED"
+    if command == "save-config":
+        return "SAVE_CONFIG_FAILED"
     if command == "sync":
         return "SYNC_FAILED"
     if command == "dashboard":

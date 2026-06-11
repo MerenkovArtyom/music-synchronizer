@@ -22,6 +22,11 @@ def _build_parser() -> argparse.ArgumentParser:
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     subparsers.add_parser("show-config")
+    save_config_parser = subparsers.add_parser("save-config")
+    save_config_parser.add_argument("--yandex-music-token", required=True)
+    save_config_parser.add_argument("--obsidian-vault-path", required=True)
+    save_config_parser.add_argument("--discovery-playlist-name", required=True)
+    save_config_parser.add_argument("--log-level", required=True)
     subparsers.add_parser("sync")
     subparsers.add_parser("dashboard")
     discovery_parser = subparsers.add_parser("discovery")
@@ -47,6 +52,14 @@ def _build_parser() -> argparse.ArgumentParser:
 def _payload_for_args(app: MusicSyncApp, args: argparse.Namespace) -> dict[str, object]:
     if args.command == "show-config":
         return app.run_command("show-config")
+    if args.command == "save-config":
+        return app.run_command(
+            "save-config",
+            yandex_music_token=args.yandex_music_token,
+            obsidian_vault_path=args.obsidian_vault_path,
+            discovery_playlist_name=args.discovery_playlist_name,
+            log_level=args.log_level,
+        )
     if args.command == "sync":
         return app.run_command("sync")
     if args.command == "dashboard":

@@ -5,7 +5,8 @@
 ## Что уже есть
 
 - окно Electron с renderer-интерфейсом для:
-  - чтения конфигурации;
+  - чтения и сохранения конфигурации;
+  - выбора Obsidian vault через системный folder picker;
   - запуска синхронизации;
   - загрузки локального dashboard;
   - поиска активных заметок по тегу или артисту;
@@ -67,6 +68,20 @@ uv run music-sync-app
 
 Команда выполняется из корня репозитория через `MUSIC_SYNC_REPO_ROOT`. Это нужно, чтобы Electron мог использовать тот же Python CLI, что и основное приложение.
 
+Для desktop-конфигурации Electron также всегда пробрасывает:
+
+```text
+MUSIC_SYNC_CONFIG_PATH=<app.getPath("userData")>/config.env
+```
+
+На macOS это даёт пользовательский config path вида:
+
+```text
+~/Library/Application Support/Music Synchronizer/config.env
+```
+
+Именно этот файл использует `.app` для first-run setup и дальнейших запусков. Локальный `.env` по-прежнему нужен только для обычного CLI и dev-сценариев вне desktop UI.
+
 `music-sync-app` уже зарегистрирован в корневом [`pyproject.toml`](/Users/artem/Programming/music_synchronizer/pyproject.toml) и не требует отдельного launcher entrypoint в исходниках Electron.
 
 Для локальных экспериментов backend можно переопределить переменной окружения:
@@ -86,14 +101,17 @@ MUSIC_SYNC_BACKEND_COMMAND='["uv", "run", "music-sync-app"]' npm run dev
 
 ## Текущий IPC surface
 
-В `window.musicSync` доступны три операции:
+В `window.musicSync` доступны операции:
 
 - `showConfig()`
+- `saveConfig({ yandexMusicToken, obsidianVaultPath, discoveryPlaylistName, logLevel })`
+- `chooseVaultPath()`
 - `runSync()`
 - `getDashboard()`
 - `listTracks({ kind, value })`
 - `getTopListen({ mode })`
 - `getRecommendations({ archived })`
+- `getDiscoveryRecommendations({ clear })`
 - `getVaultView({ selectedPath? })`
 
 Поддерживаемые фильтры для `listTracks`:
@@ -104,11 +122,14 @@ MUSIC_SYNC_BACKEND_COMMAND='["uv", "run", "music-sync-app"]' npm run dev
 Renderer не вызывает CLI напрямую. Он общается только через preload и IPC-каналы:
 
 - `music-sync:show-config`
+- `music-sync:save-config`
+- `music-sync:choose-vault-path`
 - `music-sync:sync`
 - `music-sync:dashboard`
 - `music-sync:list`
 - `music-sync:top-listen`
 - `music-sync:recommend`
+- `music-sync:discovery`
 - `music-sync:vault`
 
 ## Формат ответов от backend
@@ -117,8 +138,8 @@ Main-процесс принимает только JSON output от `music-sync
 
 ```ts
 type BackendEnvelope<T> =
-  | { ok: true; command: "show-config" | "sync" | "dashboard" | "list" | "top-listen" | "recommend" | "discovery" | "vault"; data: T }
-  | { ok: false; command: "show-config" | "sync" | "dashboard" | "list" | "top-listen" | "recommend" | "discovery" | "vault"; error: { code: string; message: string; details: Record<string, unknown> } };
+  | { ok: true; command: "show-config" | "save-config" | "sync" | "dashboard" | "list" | "top-listen" | "recommend" | "discovery" | "vault"; data: T }
+  | { ok: false; command: "show-config" | "save-config" | "sync" | "dashboard" | "list" | "top-listen" | "recommend" | "discovery" | "vault"; error: { code: string; message: string; details: Record<string, unknown> } };
 ```
 
 - `music-sync-app` должен вернуть JSON envelope вида `{ ok, command, data }` или `{ ok, command, error }`;
@@ -126,7 +147,8 @@ type BackendEnvelope<T> =
 - любые логи и диагностические сообщения должны идти в `stderr` или файл, но не в `stdout`;
 - payload с пропущенными полями, неверным `command` или лишней структурой отклоняется ещё в main-процессе.
 
-- `show-config` возвращает машиночитаемый config summary;
+- `show-config` возвращает полные текущие значения desktop-конфига;
+- `save-config` валидирует и записывает пользовательский config file;
 - `sync` возвращает структурированный summary;
 - `dashboard` возвращает path dashboard-файла, summary и top-списки;
 - `list` возвращает filter + массив треков;
@@ -141,7 +163,9 @@ type BackendEnvelope<T> =
 
 Текущий интерфейс умеет:
 
-- загрузить и показать безопасные метаданные конфигурации;
+- открыть first-run экран `Настройки`, если токен или vault path ещё не сохранены;
+- показать и отредактировать `Yandex Music token`, `Obsidian vault path`, `Discovery playlist name` и `Log level`;
+- сохранить настройки в пользовательский config path без терминала;
 - запустить `sync` и показать summary;
 - загрузить dashboard, рассчитанный по локальным заметкам и архиву;
 - выполнить поиск по активным заметкам;
@@ -151,7 +175,7 @@ type BackendEnvelope<T> =
 - показать блок рекомендаций внизу окна и при желании включить архив в расчёт;
 - отобразить статус операции: `idle`, `busy`, `success`, `error`.
 
-Интерфейс сознательно не получает секреты напрямую. Например, в конфиг-блоке отображается только факт наличия токена, а не сам токен.
+При незаполненном setup все sync-driven действия блокируются, а приложение ведёт пользователя в `Настройки`.
 
 ## Ограничения текущего прототипа
 

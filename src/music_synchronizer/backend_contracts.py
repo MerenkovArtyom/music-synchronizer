@@ -6,6 +6,7 @@ from pydantic import BaseModel, ConfigDict, TypeAdapter
 
 BackendCommand = Literal[
     "show-config",
+    "save-config",
     "sync",
     "dashboard",
     "list",
@@ -29,12 +30,18 @@ class BackendErrorPayload(ContractModel):
 
 
 class ConfigSummaryData(ContractModel):
+    yandexMusicToken: str
     yandexMusicTokenPresent: bool
     obsidianVaultPath: str
+    discoveryPlaylistName: str
     logLevel: str
 
 
 class ShowConfigData(ContractModel):
+    config: ConfigSummaryData
+
+
+class SaveConfigData(ContractModel):
     config: ConfigSummaryData
 
 
@@ -211,6 +218,18 @@ class ShowConfigErrorEnvelope(ContractModel):
     error: BackendErrorPayload
 
 
+class SaveConfigSuccessEnvelope(ContractModel):
+    ok: Literal[True]
+    command: Literal["save-config"]
+    data: SaveConfigData
+
+
+class SaveConfigErrorEnvelope(ContractModel):
+    ok: Literal[False]
+    command: Literal["save-config"]
+    error: BackendErrorPayload
+
+
 class SyncSuccessEnvelope(ContractModel):
     ok: Literal[True]
     command: Literal["sync"]
@@ -309,6 +328,7 @@ class SharedErrorEnvelope(ContractModel):
 
 COMMAND_SUCCESS_MODELS: dict[BackendCommand, type[ContractModel]] = {
     "show-config": ShowConfigSuccessEnvelope,
+    "save-config": SaveConfigSuccessEnvelope,
     "sync": SyncSuccessEnvelope,
     "dashboard": DashboardSuccessEnvelope,
     "list": ListSuccessEnvelope,
@@ -320,6 +340,7 @@ COMMAND_SUCCESS_MODELS: dict[BackendCommand, type[ContractModel]] = {
 
 COMMAND_ERROR_MODELS: dict[BackendCommand, type[ContractModel]] = {
     "show-config": ShowConfigErrorEnvelope,
+    "save-config": SaveConfigErrorEnvelope,
     "sync": SyncErrorEnvelope,
     "dashboard": DashboardErrorEnvelope,
     "list": ListErrorEnvelope,
@@ -368,4 +389,3 @@ def generated_backend_schemas() -> dict[str, dict[str, Any]]:
         schemas[f"{command}.schema.json"] = adapter.json_schema()
 
     return schemas
-

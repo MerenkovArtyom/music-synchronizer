@@ -234,3 +234,12 @@
 - Для backend-команд сгенерированы и зафиксированы JSON Schema, которые checked in в `electron/src/shared/backend-schemas/` и стали явным контрактом между Python и Electron.
 - Electron main-process перестал принимать “почти подходящий” JSON: теперь он валидирует ответ backend по command-specific schema, отклоняет missing fields и mismatched `command` и больше не зависит от человекочитаемого CLI-вывода.
 - `README.md`, `electron/README.md`, Python tests, Electron tests и typecheck обновлены под JSON-only backend и новые контрактные гарантии.
+
+### Commit 33: add desktop settings screen and user config path
+
+- В desktop-приложение добавлена отдельная вкладка `Настройки`, перенесённая в нижнюю часть левой навигации.
+- Electron теперь хранит desktop-конфигурацию в пользовательском config path через `app.getPath("userData")` и передаёт backend путь через `MUSIC_SYNC_CONFIG_PATH`.
+- Python backend научился не только читать конфиг из `.env`, но и сохранять/перечитывать env-совместимый `config.env` для packaged desktop flow.
+- В `music-sync-app` добавлена новая JSON-only команда `save-config`, а `show-config` расширен до полного editable payload.
+- Renderer получил first-run gating: без токена и `Obsidian vault path` приложение открывается на экране настроек и не даёт запускать sync.
+- В desktop UI добавлен системный folder picker для выбора vault и обновлены TypeScript/Python тесты, schemas, README и сборка Electron.

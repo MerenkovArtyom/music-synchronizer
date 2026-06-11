@@ -66,7 +66,15 @@ uv run music-sync sync
 
 ## Конфигурация
 
-Проект читает настройки из `.env`.
+CLI читает настройки из `.env`.
+
+Desktop-приложение на Electron хранит настройки отдельно, в пользовательском config path macOS:
+
+```text
+~/Library/Application Support/Music Synchronizer/config.env
+```
+
+Electron передаёт этот путь backend через `MUSIC_SYNC_CONFIG_PATH`, поэтому `.app` не зависит от `.env` рядом с приложением.
 
 Пример:
 
@@ -85,6 +93,15 @@ LOG_LEVEL=INFO
 - `LOG_LEVEL` — уровень логирования. По умолчанию `INFO`.
 
 Если `OBSIDIAN_VAULT_PATH` не задан, используется путь по умолчанию `~/Documents/my_music`.
+
+Для desktop first-run:
+
+- открой `.app`;
+- перейди в `Настройки`;
+- вставь `Yandex Music token`;
+- выбери `Obsidian vault path`;
+- сохрани настройки;
+- после этого можно запускать `sync` без терминала.
 
 ## Команды CLI
 
@@ -300,7 +317,8 @@ uv run pytest tests/test_yandex_client.py -v
 - текущий backend для Electron по умолчанию запускает `uv run music-sync-app`;
 - `music-sync-app` зарегистрирован в корневом `pyproject.toml` и предназначен только для машинного JSON-обмена;
 - в desktop UI есть read-only раздел `Vault` для просмотра дерева `my_music` и preview заметок;
-- Electron-часть пока не заменяет и не дублирует основную логику синхронизации.
+- Electron-часть не дублирует синхронизацию, а запускает тот же Python backend;
+- desktop UI теперь содержит вкладку `Настройки`, сохраняющую user config в macOS Application Support.
 
 Команды для Electron:
 

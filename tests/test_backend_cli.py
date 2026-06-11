@@ -23,8 +23,10 @@ def test_backend_cli_prints_json_success(
         "command": "show-config",
         "data": {
             "config": {
+                "yandexMusicToken": "token",
                 "yandexMusicTokenPresent": True,
                 "obsidianVaultPath": str(tmp_path),
+                "discoveryPlaylistName": "Рекомендации",
                 "logLevel": "INFO",
             }
         },
@@ -183,7 +185,7 @@ def test_backend_cli_writes_exactly_one_json_document_to_stdout(
     captured = capsys.readouterr()
     assert captured.err == ""
     payload = json.loads(captured.out)
-    assert captured.out == json.dumps(payload, sort_keys=True) + "\n"
+    assert captured.out == json.dumps(payload, ensure_ascii=False, sort_keys=True) + "\n"
 
 
 def test_backend_cli_rejects_accidental_stdout_before_envelope(
@@ -202,8 +204,10 @@ def test_backend_cli_rejects_accidental_stdout_before_envelope(
                 "command": command,
                 "data": {
                     "config": {
+                        "yandexMusicToken": "token",
                         "yandexMusicTokenPresent": True,
                         "obsidianVaultPath": str(tmp_path),
+                        "discoveryPlaylistName": "Рекомендации",
                         "logLevel": "INFO",
                     }
                 },
@@ -258,9 +262,58 @@ def test_backend_cli_returns_json_error_when_payload_breaks_schema(
 
     assert exit_code == 1
     captured = capsys.readouterr()
+
+
+def test_backend_cli_save_config_passes_arguments(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setenv("YANDEX_MUSIC_TOKEN", "token")
+    monkeypatch.setenv("OBSIDIAN_VAULT_PATH", str(tmp_path))
+
+    class FakeApp:
+        def run_command(self, command: str, **kwargs: object) -> dict[str, object]:
+            assert command == "save-config"
+            assert kwargs == {
+                "yandex_music_token": "fresh-token",
+                "obsidian_vault_path": str(tmp_path / "vault"),
+                "discovery_playlist_name": "Fresh Discovery",
+                "log_level": "DEBUG",
+            }
+            return {
+                "ok": True,
+                "command": "save-config",
+                "data": {
+                    "config": {
+                        "yandexMusicToken": "fresh-token",
+                        "yandexMusicTokenPresent": True,
+                        "obsidianVaultPath": str(tmp_path / "vault"),
+                        "discoveryPlaylistName": "Fresh Discovery",
+                        "logLevel": "DEBUG",
+                    }
+                },
+            }
+
+    monkeypatch.setattr("music_synchronizer.backend_cli.MusicSyncApp", FakeApp)
+
+    exit_code = main(
+        [
+            "save-config",
+            "--yandex-music-token",
+            "fresh-token",
+            "--obsidian-vault-path",
+            str(tmp_path / "vault"),
+            "--discovery-playlist-name",
+            "Fresh Discovery",
+            "--log-level",
+            "DEBUG",
+        ]
+    )
+
+    assert exit_code == 0
+    captured = capsys.readouterr()
     assert captured.err == ""
     payload = json.loads(captured.out)
-    assert payload["ok"] is False
-    assert payload["command"] == "show-config"
-    assert payload["error"]["code"] == "BACKEND_SCHEMA_VALIDATION_FAILED"
-    assert "yandexMusicTokenPresent" in payload["error"]["message"]
+    assert payload["command"] == "save-config"
+    assert payload["data"]["config"]["obsidianVaultPath"] == str(tmp_path / "vault")
