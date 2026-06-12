@@ -11,8 +11,11 @@
     "dev": "npm run build:electron && electron .",
     "package": "npm run package:standalone",
     "package:backend": "node ./scripts/package-backend.mjs",
+    "prepare:icon": "node ./scripts/prepare-icon.mjs",
     "package:standalone": "npm run build:electron && npm run package:backend",
-    "package:mac": "npm run package:standalone && electron-builder --mac dir --arm64",
+    "package:dmg": "npm run prepare:icon && npm run package:standalone && electron-builder --mac dmg --arm64 && node ./scripts/move-dmg.mjs",
+    "package:mac": "npm run package:dmg",
+    "package:mac:dir": "npm run prepare:icon && npm run package:standalone && electron-builder --mac dir --arm64",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "node --import tsx --test tests/*.test.ts"
   },
@@ -20,6 +23,7 @@
     "appId": "dev.artem.music-synchronizer",
     "productName": "Music Synchronizer",
     "asar": true,
+    "artifactName": "Music-Synchronizer-mac-arm64.${ext}",
     "directories": {
       "output": "release"
     },
@@ -34,8 +38,9 @@
       }
     ],
     "mac": {
+      "icon": "build/icon.png",
       "target": [
-        "dir"
+        "dmg"
       ],
       "category": "public.app-category.music"
     }

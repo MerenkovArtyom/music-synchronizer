@@ -267,3 +267,11 @@
 - Из packaged `Python.framework` исключены ненужные для backend dev-артефакты: `Tcl.framework`, `Tk.framework`, `Headers`, `share/doc`, `share/man`, `lib/pkgconfig` и `idle3`.
 - Это устранило падение `codesign` на вложенных Tcl/Tk subcomponents при сборке `npm run package:mac`.
 - `README.md`, `electron/README.md` и storyline обновлены под новый standalone packaging flow и различие между `package:backend`, `package:standalone` и `package:mac`.
+
+### Commit 37: add unsigned DMG packaging flow for GitHub releases
+
+- Desktop packaging в `electron/package.json` расширен отдельной командой `npm run package:dmg` для сборки unsigned macOS arm64 `.dmg`.
+- Вспомогательная команда `npm run package:mac:dir` оставлена для сценария, где нужен только `.app` bundle без упаковки в disk image.
+- Промежуточный `.app` теперь остаётся в `electron/release/mac-arm64/`, а готовый `Music-Synchronizer-mac-arm64.dmg` копируется в корень репозитория для удобной выкладки в GitHub Releases.
+- Для packaging-конфига добавлен отдельный Electron test, который фиксирует новый контракт скриптов, стабильное имя артефакта и разделение между `.dmg` и `.app` output.
+- `README.md` и `electron/README.md` обновлены под unsigned desktop distribution и поведение Gatekeeper на первом запуске.

@@ -341,7 +341,7 @@ npm run typecheck
 npm run build
 npm run dev
 npm run package:standalone
-npm run package:mac
+npm run package:dmg
 ```
 
 Что важно про desktop packaging:
@@ -351,6 +351,13 @@ npm run package:mac
 - внутри staging-бандла лежат embedded Python runtime, `site-packages`, копия `music_synchronizer` и launcher `music-sync-app`;
 - packaged backend больше не зависит от `uv`, системного Python или checkout репозитория на машине пользователя;
 - `npm run package:standalone` собирает Electron-часть и staging backend вместе;
-- `npm run package:mac` создаёт macOS arm64 `.app` bundle в `electron/release/mac-arm64/`.
+- `npm run package:dmg` собирает `.app` во внутренний `electron/release/`, а затем копирует готовый unsigned macOS arm64 `.dmg` в корень репозитория.
+- `npm run package:mac:dir` создаёт только macOS arm64 `.app` bundle в `electron/release/mac-arm64/` без `.dmg`.
+
+Важно для выкладки desktop-сборки:
+
+- итоговый артефакт лежит в корне репозитория как `Music-Synchronizer-mac-arm64.dmg`;
+- сборка не подписана и не notarized, поэтому macOS может показать стандартное предупреждение Gatekeeper;
+- если система блокирует первый запуск, откройте приложение через Finder: `Right click -> Open -> Open`.
 
 Подробности по desktop-прототипу лежат в [electron/README.md](/Users/artem/Programming/music_synchronizer/electron/README.md).

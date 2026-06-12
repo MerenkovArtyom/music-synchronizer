@@ -44,7 +44,8 @@ npm run build
 npm run dev
 npm run package:backend
 npm run package:standalone
-npm run package:mac
+npm run package:dmg
+npm run package:mac:dir
 ```
 
 Что делают команды:
@@ -56,7 +57,8 @@ npm run package:mac
 - `npm run dev` — сначала выполняет `build`, затем запускает `electron .`.
 - `npm run package:backend` — подготавливает `dist/package/backend` со standalone Python runtime для production-layout сценария.
 - `npm run package:standalone` — собирает Electron-часть и staging backend вместе.
-- `npm run package:mac` — создаёт macOS arm64 `.app` bundle в `release/mac-arm64/`.
+- `npm run package:dmg` — собирает `.app` в `release/`, затем копирует готовый unsigned macOS arm64 `.dmg` в корень репозитория.
+- `npm run package:mac:dir` — создаёт только macOS arm64 `.app` bundle в `release/mac-arm64/` без упаковки в `.dmg`.
 
 Важно: `npm run dev` сейчас не даёт hot reload. По факту это локальный запуск уже собранного приложения.
 
@@ -198,7 +200,9 @@ type BackendEnvelope<T> =
 
 - Dev-режим по-прежнему ожидает, что `uv` и backend проекта доступны локально.
 - Production packaging собирается на macOS arm64 и использует embedded Python runtime из локального build-окружения.
-- `npm run package:mac` собирает локальный unsigned `.app`, но ещё не делает DMG, signing или notarization.
+- `npm run package:dmg` собирает локальный unsigned `.dmg` без signing или notarization.
+- итоговый `.dmg` появляется в корне репозитория как `Music-Synchronizer-mac-arm64.dmg`, а промежуточный `.app` остаётся в `release/mac-arm64/`.
+- так как сборка unsigned, на чистой системе macOS может показать предупреждение Gatekeeper; для первого запуска нужно выбрать `Open` через контекстное меню Finder.
 - Hot reload пока не реализован.
 
 ## Куда смотреть в коде
