@@ -1,5 +1,8 @@
 # music_synchronizer
 
+Релиз desktop-приложения: [v0.1.0](https://github.com/MerenkovArtyom/music-synchronizer/releases/tag/v0.1.0)
+macOS `.dmg`: [Music-Synchronizer-mac-arm64.dmg](https://github.com/MerenkovArtyom/music-synchronizer/releases/download/v0.1.0/Music-Synchronizer-mac-arm64.dmg)
+
 Небольшой CLI-проект на Python 3.12 и `uv`, который синхронизирует понравившиеся треки из Яндекс Музыки в Obsidian как Markdown-заметки.
 
 Сейчас основная цель проекта:
@@ -43,6 +46,13 @@ uv run music-sync-app show-config
 - `uv`
 - токен Яндекс Музыки
 - локальный vault Obsidian
+
+Основные Python-зависимости проекта:
+
+- `typer` — CLI-команды;
+- `pydantic-settings` — загрузка настроек;
+- `python-dotenv` — чтение `.env`;
+- `yandex-music` — доступ к API Яндекс Музыки.
 
 ## Быстрый старт
 
@@ -151,7 +161,7 @@ uv run music-sync-app show-config
 Режимы CLI:
 
 - `music-sync` — человекочитаемый CLI для запуска из терминала.
-- `music-sync-app` — JSON-only backend для Electron.
+- `music-sync-app` — JSON-only backend entrypoint для Electron dev-режима и основа packaged desktop launcher.
 - JSON Schema для `music-sync-app` зафиксированы в [electron/src/shared/backend-schemas/](/Users/artem/Programming/music_synchronizer/electron/src/shared/backend-schemas).
 
 Особенности команды `list`:
@@ -309,23 +319,32 @@ uv run pytest tests/test_yandex_client.py -v
 
 ## Структура репозитория
 
+- [src/music_synchronizer/app.py](/Users/artem/Programming/music_synchronizer/src/music_synchronizer/app.py) — backend-операции, которые переиспользует JSON-only app-backend для desktop UI.
+- [src/music_synchronizer/backend_cli.py](/Users/artem/Programming/music_synchronizer/src/music_synchronizer/backend_cli.py) — entrypoint `music-sync-app`, который печатает один JSON document в `stdout`.
+- [src/music_synchronizer/backend_contracts.py](/Users/artem/Programming/music_synchronizer/src/music_synchronizer/backend_contracts.py) — Pydantic-модели и envelope-контракты для app-backend.
 - [src/music_synchronizer/cli.py](/Users/artem/Programming/music_synchronizer/src/music_synchronizer/cli.py) — Typer CLI и пользовательские сообщения.
 - [src/music_synchronizer/config.py](/Users/artem/Programming/music_synchronizer/src/music_synchronizer/config.py) — настройки из окружения и `.env`.
 - [src/music_synchronizer/sync.py](/Users/artem/Programming/music_synchronizer/src/music_synchronizer/sync.py) — orchestration слой синхронизации.
 - [src/music_synchronizer/yandex_client.py](/Users/artem/Programming/music_synchronizer/src/music_synchronizer/yandex_client.py) — адаптер над `yandex-music`.
 - [src/music_synchronizer/obsidian.py](/Users/artem/Programming/music_synchronizer/src/music_synchronizer/obsidian.py) — запись заметок, архив, снапшоты и поиск.
 - [src/music_synchronizer/models.py](/Users/artem/Programming/music_synchronizer/src/music_synchronizer/models.py) — общие dataclass-модели.
+- [tests/test_app_backend.py](/Users/artem/Programming/music_synchronizer/tests/test_app_backend.py) — тесты backend-операций для desktop app.
+- [tests/test_backend_cli.py](/Users/artem/Programming/music_synchronizer/tests/test_backend_cli.py) — тесты JSON-only CLI entrypoint `music-sync-app`.
+- [tests/test_backend_contracts.py](/Users/artem/Programming/music_synchronizer/tests/test_backend_contracts.py) — тесты backend-контрактов и сериализации.
 - [tests/test_cli.py](/Users/artem/Programming/music_synchronizer/tests/test_cli.py) — тесты CLI.
+- [tests/test_config.py](/Users/artem/Programming/music_synchronizer/tests/test_config.py) — тесты загрузки конфигурации.
+- [tests/test_sync.py](/Users/artem/Programming/music_synchronizer/tests/test_sync.py) — тесты orchestration-логики синхронизации.
 - [tests/test_obsidian_sync.py](/Users/artem/Programming/music_synchronizer/tests/test_obsidian_sync.py) — тесты формата заметок и синка.
+- [tests/test_yandex_client.py](/Users/artem/Programming/music_synchronizer/tests/test_yandex_client.py) — тесты нормализации данных Яндекс Музыки.
 
-## Electron-прототип
+## Desktop-приложение на Electron
 
 В репозитории также есть desktop-оболочка в [electron/](/Users/artem/Programming/music_synchronizer/electron).
 
 Важно:
 
 - это оболочка над общим Python app-backend;
-- текущий backend для Electron по умолчанию запускает `uv run music-sync-app`;
+- в dev-режиме Electron по умолчанию запускает `uv run music-sync-app`, а в packaged `.app` использует встроенный launcher `backend/music-sync-app`;
 - `music-sync-app` зарегистрирован в корневом `pyproject.toml` и предназначен только для машинного JSON-обмена;
 - в desktop UI есть read-only раздел `Vault` для просмотра дерева `my_music` и preview заметок;
 - Electron-часть не дублирует синхронизацию, а запускает тот же Python backend;
@@ -336,12 +355,15 @@ uv run pytest tests/test_yandex_client.py -v
 
 ```bash
 cd electron
+npm install
 npm run test
 npm run typecheck
 npm run build
 npm run dev
+npm run package:backend
 npm run package:standalone
 npm run package:dmg
+npm run package:mac:dir
 ```
 
 Что важно про desktop packaging:
@@ -354,10 +376,10 @@ npm run package:dmg
 - `npm run package:dmg` собирает `.app` во внутренний `electron/release/`, а затем копирует готовый unsigned macOS arm64 `.dmg` в корень репозитория.
 - `npm run package:mac:dir` создаёт только macOS arm64 `.app` bundle в `electron/release/mac-arm64/` без `.dmg`.
 
-Важно для выкладки desktop-сборки:
+Важно для desktop-релиза:
 
 - итоговый артефакт лежит в корне репозитория как `Music-Synchronizer-mac-arm64.dmg`;
 - сборка не подписана и не notarized, поэтому macOS может показать стандартное предупреждение Gatekeeper;
 - если система блокирует первый запуск, откройте приложение через Finder: `Right click -> Open -> Open`.
 
-Подробности по desktop-прототипу лежат в [electron/README.md](/Users/artem/Programming/music_synchronizer/electron/README.md).
+Подробности по desktop-приложению лежат в [electron/README.md](/Users/artem/Programming/music_synchronizer/electron/README.md).

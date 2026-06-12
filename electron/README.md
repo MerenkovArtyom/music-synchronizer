@@ -1,6 +1,6 @@
-# Electron Prototype
+# Music Synchronizer Desktop App
 
-Это desktop-оболочка для существующего Python backend из корня репозитория. Electron-часть не дублирует логику синхронизации и не ходит в Яндекс Музыку напрямую: она запускает отдельный Python app-backend, получает JSON-ответ и показывает его в интерфейсе.
+Это desktop-приложение для существующего Python backend из корня репозитория. Electron-часть не дублирует логику синхронизации и не ходит в Яндекс Музыку напрямую: она запускает отдельный Python app-backend, получает JSON-ответ и показывает его в интерфейсе.
 
 ## Что уже есть
 
@@ -15,22 +15,22 @@
 - IPC между renderer и main-процессом;
 - запуск Python backend как дочернего процесса;
 - строгая runtime-валидация JSON-ответов backend по checked-in JSON Schema;
-- тесты для разбора backend-команд и CLI-ответов.
+- тесты для backend-адаптера, packaging-конфига и renderer shell.
 
 ## Архитектура
 
 - `src/main/` — lifecycle окна, IPC handlers и запуск Python CLI.
 - `src/preload/` — узкий bridge, который отдаёт renderer только разрешённые методы.
-- `src/renderer/` — UI прототипа без прямого доступа к Node API.
-- `src/shared/` — общие TypeScript-контракты между слоями.
-- `tests/` — тесты backend-адаптера и парсинга ответов CLI.
+- `src/renderer/` — UI desktop-приложения, HTML/CSS и shell-controller без прямого доступа к Node API.
+- `src/shared/` — общие TypeScript-контракты, preload bridge-типы и JSON Schema для backend-ответов.
+- `tests/` — тесты backend-адаптера, renderer shell и packaging-скриптов.
 
 Текущая модель ответственности такая:
 
 - Python отвечает за реальные данные и бизнес-логику.
 - Electron отвечает за запуск backend-команд, IPC и UI.
 - `music-sync` остаётся отдельным пользовательским CLI.
-- `music-sync-app` остаётся отдельным JSON-only backend для Electron.
+- `music-sync-app` остаётся JSON-only backend entrypoint, который Electron использует напрямую в dev-режиме и косвенно через packaged launcher в `.app`.
 
 ## Команды
 
@@ -50,7 +50,7 @@ npm run package:mac:dir
 
 Что делают команды:
 
-- `npm install` — устанавливает dev-зависимости Electron/TypeScript.
+- `npm install` — устанавливает dev-зависимости Electron toolchain: `electron`, `electron-builder`, `typescript`, `esbuild`, `tsx` и `@types/node`.
 - `npm run test` — запускает тесты `node --test` для backend-обвязки.
 - `npm run typecheck` — проверяет типы TypeScript без сборки.
 - `npm run build` — очищает `dist/`, проверяет типы и собирает main/preload/renderer.
@@ -72,6 +72,14 @@ uv run music-sync-app
 
 Команда выполняется из корня репозитория через `MUSIC_SYNC_REPO_ROOT`. Это нужно, чтобы Electron мог использовать тот же Python CLI, что и основное приложение.
 
+В packaged-сборке используется не `uv run ...`, а встроенный launcher:
+
+```text
+backend/music-sync-app
+```
+
+Этот launcher запускает embedded Python runtime и модуль `music_synchronizer.backend_cli` внутри бандла.
+
 Для desktop-конфигурации Electron также всегда пробрасывает:
 
 ```text
@@ -86,7 +94,7 @@ MUSIC_SYNC_CONFIG_PATH=<app.getPath("userData")>/config.env
 
 Именно этот файл использует `.app` для first-run setup и дальнейших запусков. Локальный `.env` по-прежнему нужен только для обычного CLI и dev-сценариев вне desktop UI.
 
-`music-sync-app` уже зарегистрирован в корневом [`pyproject.toml`](/Users/artem/Programming/music_synchronizer/pyproject.toml) и не требует отдельного launcher entrypoint в исходниках Electron.
+`music-sync-app` уже зарегистрирован в корневом [`pyproject.toml`](/Users/artem/Programming/music_synchronizer/pyproject.toml). В dev-режиме Electron использует этот entrypoint напрямую, а packaged launcher вызывает тот же модуль `music_synchronizer.backend_cli` внутри бандла.
 
 Для локальных экспериментов backend можно переопределить переменной окружения:
 
@@ -196,7 +204,7 @@ type BackendEnvelope<T> =
 - если в shell уже заданы `YANDEX_MUSIC_TOKEN` или `OBSIDIAN_VAULT_PATH`, приложение может пропустить first-run welcome screen даже при пустом `config.env`;
 - для чистой проверки onboarding лучше запускать `npm run dev` без этих переменных.
 
-## Ограничения текущего прототипа
+## Ограничения и особенности
 
 - Dev-режим по-прежнему ожидает, что `uv` и backend проекта доступны локально.
 - Production packaging собирается на macOS arm64 и использует embedded Python runtime из локального build-окружения.
@@ -211,13 +219,10 @@ type BackendEnvelope<T> =
 - [src/main/index.ts](/Users/artem/Programming/music_synchronizer/electron/src/main/index.ts) — окно приложения и регистрация IPC handlers.
 - [src/preload/index.ts](/Users/artem/Programming/music_synchronizer/electron/src/preload/index.ts) — bridge `window.musicSync`.
 - [src/shared/contracts.ts](/Users/artem/Programming/music_synchronizer/electron/src/shared/contracts.ts) — общие типы и envelope-контракты.
+- [src/shared/backend-schemas/](/Users/artem/Programming/music_synchronizer/electron/src/shared/backend-schemas) — JSON Schema, по которым main-процесс валидирует ответы `music-sync-app`.
 - [src/renderer/index.ts](/Users/artem/Programming/music_synchronizer/electron/src/renderer/index.ts) — клиентская логика интерфейса.
+- [src/renderer/shell-controller.ts](/Users/artem/Programming/music_synchronizer/electron/src/renderer/shell-controller.ts) — orchestration UI-состояний и вызовов bridge-API.
 - [tests/backend.test.ts](/Users/artem/Programming/music_synchronizer/electron/tests/backend.test.ts) — тесты backend-адаптера.
-
-## Дальше
-
-Следующие логичные шаги для прототипа:
-
-1. решить, будет ли desktop-версия поставляться вместе с Python runtime;
-2. расширять UI уже поверх зафиксированного JSON-only backend-контракта;
-3. при необходимости добавить live reload и dev-удобства для renderer/main.
+- [tests/package-backend.test.ts](/Users/artem/Programming/music_synchronizer/electron/tests/package-backend.test.ts) — тесты packaging backend runtime.
+- [tests/packaging-config.test.ts](/Users/artem/Programming/music_synchronizer/electron/tests/packaging-config.test.ts) — тесты packaging-конфигурации Electron.
+- [tests/renderer-shell.test.ts](/Users/artem/Programming/music_synchronizer/electron/tests/renderer-shell.test.ts) — тесты renderer shell-controller.
