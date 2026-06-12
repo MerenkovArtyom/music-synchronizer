@@ -42,7 +42,8 @@ npm run test
 npm run typecheck
 npm run build
 npm run dev
-npm run package
+npm run package:backend
+npm run package:standalone
 npm run package:mac
 ```
 
@@ -53,8 +54,9 @@ npm run package:mac
 - `npm run typecheck` — проверяет типы TypeScript без сборки.
 - `npm run build` — очищает `dist/`, проверяет типы и собирает main/preload/renderer.
 - `npm run dev` — сначала выполняет `build`, затем запускает `electron .`.
-- `npm run package` — собирает Electron-часть и подготавливает `dist/package/backend` с локальным Python backend для packaged-layout сценария.
-- `npm run package:mac` — создаёт настоящий macOS `.app` bundle в `release/mac-arm64/` или `release/mac/`.
+- `npm run package:backend` — подготавливает `dist/package/backend` со standalone Python runtime для production-layout сценария.
+- `npm run package:standalone` — собирает Electron-часть и staging backend вместе.
+- `npm run package:mac` — создаёт macOS arm64 `.app` bundle в `release/mac-arm64/`.
 
 Важно: `npm run dev` сейчас не даёт hot reload. По факту это локальный запуск уже собранного приложения.
 
@@ -194,9 +196,8 @@ type BackendEnvelope<T> =
 
 ## Ограничения текущего прототипа
 
-- Python runtime и окружение пока не упаковываются внутрь desktop-приложения.
-- Прототип ожидает, что `uv` и backend проекта доступны локально.
-- Первая packaged-версия опирается на локально собранный `.venv`, поэтому артефакт привязан к текущей платформе и архитектуре.
+- Dev-режим по-прежнему ожидает, что `uv` и backend проекта доступны локально.
+- Production packaging собирается на macOS arm64 и использует embedded Python runtime из локального build-окружения.
 - `npm run package:mac` собирает локальный unsigned `.app`, но ещё не делает DMG, signing или notarization.
 - Hot reload пока не реализован.
 

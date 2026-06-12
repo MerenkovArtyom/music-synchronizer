@@ -340,15 +340,17 @@ npm run test
 npm run typecheck
 npm run build
 npm run dev
-npm run package
+npm run package:standalone
 npm run package:mac
 ```
 
-Что важно про `npm run package`:
+Что важно про desktop packaging:
 
-- команда подготавливает packaged-layout backend в `electron/dist/package/backend`;
-- внутри staging-бандла лежат `src/`, локальный `.venv` и launcher `music-sync-app`;
-- это MVP для standalone-layout и он зависит от локально собранного окружения, а не от универсального инсталлера.
-- `npm run package:mac` создаёт локальный macOS `.app` bundle в `electron/release/`.
+- `npm run dev` по-прежнему использует backend из репозитория через `uv run music-sync-app`;
+- `npm run package:backend` подготавливает standalone backend в `electron/dist/package/backend`;
+- внутри staging-бандла лежат embedded Python runtime, `site-packages`, копия `music_synchronizer` и launcher `music-sync-app`;
+- packaged backend больше не зависит от `uv`, системного Python или checkout репозитория на машине пользователя;
+- `npm run package:standalone` собирает Electron-часть и staging backend вместе;
+- `npm run package:mac` создаёт macOS arm64 `.app` bundle в `electron/release/mac-arm64/`.
 
 Подробности по desktop-прототипу лежат в [electron/README.md](/Users/artem/Programming/music_synchronizer/electron/README.md).

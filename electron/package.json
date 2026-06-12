@@ -6,10 +6,13 @@
   "main": "dist/main/index.cjs",
   "scripts": {
     "clean": "rm -rf dist",
-    "build": "npm run clean && tsc --noEmit -p tsconfig.json && node ./scripts/build.mjs",
-    "dev": "npm run build && electron .",
-    "package": "npm run build && node ./scripts/package-backend.mjs",
-    "package:mac": "npm run package && electron-builder --mac dir",
+    "build": "npm run build:electron",
+    "build:electron": "npm run clean && tsc --noEmit -p tsconfig.json && node ./scripts/build.mjs",
+    "dev": "npm run build:electron && electron .",
+    "package": "npm run package:standalone",
+    "package:backend": "node ./scripts/package-backend.mjs",
+    "package:standalone": "npm run build:electron && npm run package:backend",
+    "package:mac": "npm run package:standalone && electron-builder --mac dir --arm64",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "node --import tsx --test tests/*.test.ts"
   },

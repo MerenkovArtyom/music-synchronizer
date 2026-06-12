@@ -252,3 +252,18 @@
 - Во время сохранения интерфейс показывает отдельный loading state с пояснением, что сейчас идёт проверка токена и доступа к аккаунту.
 - Ошибки `invalid token`, `Yandex API unavailable`, `backend not found` и `uv/python not found` нормализованы в стабильные коды и показываются пользователю с понятными следующими шагами.
 - README, Electron README, Python tests, Electron tests и typecheck обновлены под новый onboarding и save-validation flow.
+
+## 2026-06-12
+
+### Commit 35: package desktop backend as a standalone macOS runtime
+
+- Production packaging для Electron переведён с копирования локального `.venv` на standalone backend layout в `electron/dist/package/backend`.
+- В packaged backend теперь лежат embedded `Python.framework`, отдельные `site-packages`, копия `music_synchronizer` и launcher `music-sync-app`, который запускает backend без `uv`, системного Python и checkout репозитория.
+- Launcher и runtime layout зафиксированы отдельными Electron tests, а production scripts в `electron/package.json` разделены на `package:backend`, `package:standalone` и `package:mac`.
+- Packaging script научился переписывать framework symlink, вычищать virtualenv/editable следы и делать smoke-check через `music-sync-app show-config` прямо во время сборки.
+
+### Commit 36: prune non-runtime Python framework assets for macOS codesign
+
+- Из packaged `Python.framework` исключены ненужные для backend dev-артефакты: `Tcl.framework`, `Tk.framework`, `Headers`, `share/doc`, `share/man`, `lib/pkgconfig` и `idle3`.
+- Это устранило падение `codesign` на вложенных Tcl/Tk subcomponents при сборке `npm run package:mac`.
+- `README.md`, `electron/README.md` и storyline обновлены под новый standalone packaging flow и различие между `package:backend`, `package:standalone` и `package:mac`.
